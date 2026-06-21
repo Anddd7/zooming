@@ -262,6 +262,7 @@ Proposed
 
 ### Milestone 2 - Canvas Editor Foundation
 
+- App 主体嵌入可编辑 Canvas 主区（editor host）
 - 画布、视口、网格、坐标转换
 - 图层切换
 - 线/矩形/多边形基础编辑
@@ -289,6 +290,7 @@ Proposed
 ### Editing
 
 - 可以创建项目并打开编辑器
+- App 主体已嵌入 Canvas 编辑主区（后续交互能力在该区域演进）
 - 可以新增多个图层并控制显隐/锁定
 - 可以在画布中新增 `linear`、`surface`、`furniture` 三类可编辑对象
 - `verticalSurface` 可被创建并参与属性/成本系统

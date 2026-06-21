@@ -1,16 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { App } from './App';
+import { App } from './app/App';
 
 describe('App shell', () => {
-  it('renders heading and bootstrap description', () => {
+  it('renders heading and canvas editor area', () => {
     render(<App />);
 
     expect(
       screen.getByRole('heading', { name: 'Zooming Indoor Design Tool' }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText('Bootstrap shell ready. Editor modules will be added incrementally.'),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('editor-canvas')).toBeInTheDocument();
   });
 });

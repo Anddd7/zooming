@@ -1,3 +1,5 @@
+import { CanvasEditor } from "../engine/canvas/CanvasEditor";
+
 export function App() {
   return (
     <main className="min-h-screen bg-canvas text-body">
@@ -7,6 +9,7 @@ export function App() {
           Plan 001 execution bootstrap: React + TypeScript + Tailwind + theme
           pipeline.
         </p>
+        <CanvasEditor />
       </section>
     </main>
   );
