@@ -19,6 +19,7 @@ Accepted
 - 易于统一风格
 - 可版本化
 - 可与 React/Tailwind 集成
+- 可与 shadcn 风格无头组件组合
 - 可支持“中古 / 奶油 / 现代 / 意式”等业务主题扩展
 
 的前端设计体系。
@@ -32,7 +33,8 @@ Accepted
 1. **设计原语层** 使用 Apple design.md 基线
 2. **主题产物层** 使用导出的 Tailwind CSS 变量/样式
 3. **业务主题层** 在 design token 之上扩展室内设计业务配色
-4. **组件层** 优先消费 token/class，而不是写死颜色值
+ 4. **组件层** 采用 Tailwind CSS + shadcn 风格无头组件组织方式
+ 5. **组件实现** 优先消费 token/class，而不是写死颜色值
 
 ## Rationale
 
@@ -47,6 +49,12 @@ Accepted
 - React 前端容易接入
 - 可结合组件库与自定义样式
 - 保持 token 到 UI 的一致传递
+
+### Why Tailwind + shadcn-style Headless Components
+
+- 保持组件结构灵活，不被重型视觉组件库绑定
+- 便于严格消费 `DESIGN.md -> theme.css` 生成的 token
+- 更适合在表单、面板、工具栏与编辑器周边 UI 中逐步搭建一致体验
 
 ### Why Separate Product Themes from Base Design Primitives
 

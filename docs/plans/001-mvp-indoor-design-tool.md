@@ -9,6 +9,7 @@ Proposed
 - [x] MVP 范围、里程碑、验收标准已定义
 - [x] 核心架构决策已沉淀到 ADR
 - [x] 设计系统与主题生成流程已确定
+- [x] MVP 运行模式、建模边界、编辑器最小闭环已澄清
 - [ ] 初始化 React/Vite/TypeScript 项目骨架
 - [ ] 落地 Canvas 编辑器基础能力
 - [ ] 落地工程量/成本/任务联动
@@ -48,7 +49,7 @@ Proposed
 - React + TypeScript 单页应用
 - Canvas 2D 编辑器基础能力
 - mm 世界坐标系统
-- 项目创建/加载/保存
+- 项目创建/加载/导入/导出
 - YAML 文件导入导出
 - 自定义图层的增删改、排序、显隐、锁定
 - 基础图元与对象：
@@ -60,15 +61,21 @@ Proposed
 - 按图层/房间/类别筛选物品和汇总成本
 - 任务/子任务、状态、进度、预算对比
 - 基于 Apple design.md 风格的 UI 主题接入流程
+- Tailwind CSS + shadcn 风格无头组件接入
 
 ### Out of Scope (当前不做)
 
 - 多人协作/实时协同
 - 服务端 API / 用户系统
 - 数据库存储实现
+- File System Access API / 自动写回本地文件
+- 桌面壳（Tauri/Electron）
 - 精确级瓷砖排版与切割优化算法
 - 3D 建模/渲染
 - 自动识别 CAD / 图像户型
+- 墙体厚度模型、门窗语义、自动拓扑推导
+- 施工下单级算量
+- 高级编辑体验（多选、Undo/Redo、复杂对齐线、富旋转交互）
 - 复杂施工排程（关键路径、资源负载）
 
 ## Explicit Assumptions
@@ -76,6 +83,47 @@ Proposed
 - 假设：MVP 先以“浏览器内编辑 + 手动导入导出 YAML 文件”为主，不依赖本地原生文件系统持续写回。（置信度：中）
 - 假设：瓷砖类对象一期先做“覆盖面积 + 规格 + 损耗率”估算，不做精确切砖求解。（置信度：高）
 - 假设：墙纸/墙漆/吊顶等非平面对象一期以属性记录与成本计算为主，不要求在平面图中完整几何表达。（置信度：高）
+
+## Confirmed MVP Decisions
+
+### 1. Runtime Model
+
+- MVP 运行在浏览器中
+- 用户通过“导入 YAML / 导出 YAML”完成持久化
+- 不做自动写回本地文件
+- 不引入 File System Access API 或桌面壳作为一期前提
+
+### 2. Floor Plan Modeling Boundary
+
+- 采用轻量户型边界模型
+- 支持边界线、房间轮廓、房间命名
+- Room 由用户显式定义，不从墙体拓扑自动推导
+- 不做墙体厚度、门窗语义、自动闭合拓扑推导
+
+### 3. Item Capability Boundary
+
+- `linear`: 支持折线绘制与长度计算
+- `surface`: 支持区域定义与面积计算
+- `furniture`: 支持矩形占位、拖拽、旋转、吸附
+- `verticalSurface`: 支持属性记录、挂靠关系、成本计算
+
+### 4. Estimate Precision Boundary
+
+- 一期成本系统定位为估算级核算
+- 服务于预算判断、方案比较与任务成本跟踪
+- 不承诺施工下单级精度
+
+### 5. Task Model Boundary
+
+- 任务是独立施工工作项
+- 房间、图层、物品是任务的关联上下文与筛选维度
+- 不以房间树或物品树作为任务主轴
+
+### 6. Editor Interaction Boundary
+
+- 一期编辑器以最小可用交互闭环为目标
+- 支持画布导航、图层切换、基础对象创建、对象选择与移动、基础吸附、删除
+- 高级编辑体验不进入一期验收标准
 
 ## User Roles
 
@@ -122,6 +170,7 @@ Proposed
 - 缩放、平移、网格、标尺
 - 选择、拖拽、删除
 - 基础吸附：网格、顶点、边缘
+- 最小对象工具：polyline、polygon/rect、furniture rect
 
 ### 3. Layer Management
 
@@ -241,14 +290,16 @@ Proposed
 
 - 可以创建项目并打开编辑器
 - 可以新增多个图层并控制显隐/锁定
-- 可以在画布中新增至少三类对象：线性对象、平面对象、家具对象
-- 支持拖拽、缩放、基础吸附
+- 可以在画布中新增 `linear`、`surface`、`furniture` 三类可编辑对象
+- `verticalSurface` 可被创建并参与属性/成本系统
+- 支持平移、缩放、选择、拖拽、删除、基础吸附
 
 ### Data
 
 - 项目可导出为 YAML
 - YAML 可重新导入并恢复主要数据
 - UI 不直接依赖 YAML 结构
+- 导入/导出是一期唯一持久化路径
 
 ### Estimate
 
@@ -287,6 +338,54 @@ Proposed
 - E2E：
   - 编辑器基础操作
   - 任务与预算总览联动
+
+## Parallel Execution Breakdown
+
+### Track 0 - Spec & Skeleton Baseline
+
+- 更新计划、术语与 ADR 对齐
+- 初始化 React/Vite/TypeScript 项目骨架
+- 建立目录结构与基础 store/repository interfaces
+
+### Track 1 - Domain & YAML
+
+- 定义 `Project / Layer / Room / Item / Task / Estimate` 模型
+- 定义 item kind、pricing mode、关系模型
+- 定义 YAML DTO、mapper、样例项目
+
+### Track 2 - Canvas Engine
+
+- 实现 viewport、网格、world(mm) ↔ screen(px)
+- 实现 polyline/polygon/rect primitive
+- 实现 hit test、selection、drag、grid/vertex snap
+
+### Track 3 - Editor UI Shell
+
+- 实现 editor 页面布局、工具栏、图层面板、属性面板
+- 装配图层控制与对象创建流程
+
+### Track 4 - Estimate & Budget
+
+- 实现 measurement、pricing、waste rate、aggregation query
+- 实现预算对比与超支状态
+
+### Track 5 - Task & Progress
+
+- 实现任务/子任务模型、关联关系、任务页与进度摘要
+
+### Track 6 - Theme System
+
+- 接入 Tailwind CSS + shadcn 风格无头组件
+- 接入 `DESIGN.md -> src/styles/theme.css`
+- 建 semantic token / domain token 映射
+
+## Recommended Delivery Order
+
+1. Track 0 + Track 1 基础模型
+2. Track 6 主题接入最小闭环
+3. Track 2 + Track 3 打通编辑器闭环
+4. Track 4 + Track 5 打通业务价值闭环
+5. YAML round-trip、样例项目、E2E smoke 验收
 
 ## Follow-up Documents
 
