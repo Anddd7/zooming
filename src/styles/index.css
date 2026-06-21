@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "./theme.css";
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body, "SF Pro Text", sans-serif);
+}
