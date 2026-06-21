@@ -10,7 +10,9 @@ Proposed
 - [x] 核心架构决策已沉淀到 ADR
 - [x] 设计系统与主题生成流程已确定
 - [x] MVP 运行模式、建模边界、编辑器最小闭环已澄清
-- [ ] 初始化 React/Vite/TypeScript 项目骨架
+- [x] 初始化 React/Vite/TypeScript 项目骨架
+- [x] 路由、基础布局、主题接入（Milestone 1）
+- [x] 领域模型与 repository 接口基线（Milestone 1）
 - [ ] 落地 Canvas 编辑器基础能力
 - [ ] 落地工程量/成本/任务联动
 - [ ] 落地 YAML 导入导出与样例项目

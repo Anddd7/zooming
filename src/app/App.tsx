@@ -1,4 +1,6 @@
-import { CanvasEditor } from "../engine/canvas/CanvasEditor";
+import { BrowserRouter } from "react-router-dom";
+
+import { AppRoutes } from "./router/AppRoutes";
 
 export function App() {
   return (
@@ -9,7 +11,9 @@ export function App() {
           Plan 001 execution bootstrap: React + TypeScript + Tailwind + theme
           pipeline.
         </p>
-        <CanvasEditor />
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
       </section>
     </main>
   );
