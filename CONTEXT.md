@@ -20,6 +20,14 @@ _Avoid_: Tab, page
 项目中的一个被建模对象，表示可计量、可定价、可归属到图层或房间的设计/施工实体。
 _Avoid_: Shape, asset
 
+**Primitive**:
+编辑器中的底层可绘制几何对象（polyline / rect / polygon），作为 Item 的几何承载形式。
+_Avoid_: Widget, sprite
+
+**Vertex**:
+几何对象上的可编辑控制点，可通过属性面板输入或画布拖拽直接调整位置。
+_Avoid_: Anchor handle, node dot
+
 **Task**:
 一个独立施工工作项，可关联房间、图层和物品，并用于跟踪状态、进度与成本。
 _Avoid_: Ticket, checklist item
