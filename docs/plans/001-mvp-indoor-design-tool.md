@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+In Progress
 
 ## Progress Snapshot
 
@@ -17,8 +17,10 @@ Proposed
 - [x] Canvas 真正渲染层 + 网格 + 基础 pan/zoom（Milestone 2 slice 1）
 - [x] 图层切换 + 线/矩形/多边形基础编辑（Milestone 2 slice 2）
 - [x] 图层面板 + 本地持久化 + 顶点/旋转编辑闭环（Milestone 2 interaction hardening）
-- [x] 落地工程量/成本/任务联动（Milestone 3 slice: pricing modes + measure/cost summary + budget compare + properties panel collapse）
-- [ ] 落地 YAML 导入导出与素材库/标准素材
+- [x] 落地工程量/成本联动（Milestone 3 slice: pricing modes + measure/cost summary + budget compare + properties panel collapse）
+- [x] Milestone 6 绘图计算优化（视图中心创建 / 素材库收藏与插入 / 平铺复制 / 水平垂直对齐平均排布 / 线宽视觉配置）
+- [ ] Milestone 4 任务与总览（任务/子任务、关联、进度）
+- [ ] 落地 YAML 导入导出与存储格式稳定化（Milestone 5）
 
 ## Related ADRs
 
@@ -80,7 +82,7 @@ Proposed
 - 自动识别 CAD / 图像户型
 - 墙体厚度模型、门窗语义、自动拓扑推导
 - 施工下单级算量
-- 高级编辑体验（多选、Undo/Redo、复杂对齐线、富旋转交互）
+- 高级编辑体验（复杂对齐线吸附、富旋转交互）
 - 复杂施工排程（关键路径、资源负载）
 
 ## Explicit Assumptions
@@ -176,6 +178,11 @@ Proposed
 - 选择、拖拽、删除
 - 基础吸附：网格、顶点、边缘
 - 最小对象工具：polyline、polygon/rect、furniture rect
+- 新建对象默认落在当前视图中心
+- 素材库：支持“收藏当前选中对象”为素材，支持从标准素材/收藏素材插入到当前视图中心
+- 平铺：支持单对象按 `x * y` 复制平铺
+- 多选对齐：支持水平/垂直对齐并沿目标轴平均分布
+- `linear` 对象支持线宽配置（仅视觉区分，不参与算量）
 
 ### 3. Layer Management
 
@@ -290,6 +297,16 @@ Proposed
 - 存储格式稳定化
 - 素材库与标准素材（可收藏当前对象并复用插入）
 
+### Milestone 6 - 绘图计算优化
+
+- 工具栏新建元素默认放置在当前视图中心
+- 素材库能力：
+  - 将当前选中元素加入素材库（工具栏“收藏”）
+  - 打开素材库选择框并将素材插入到当前页面中心（工具栏“素材库”）
+- 平铺能力：选择单个元素后，按 `x * y` 参数复制并平铺
+- 多选对齐能力：水平对齐、垂直对齐，并保证平均排布
+- 线对象支持粗细配置（仅视觉区分，不参与工程量/成本）
+
 ## Acceptance Criteria
 
 ### Editing
@@ -300,6 +317,11 @@ Proposed
 - 可以在画布中新增 `linear`、`surface`、`furniture` 三类可编辑对象
 - `verticalSurface` 可被创建并参与属性/成本系统
 - 支持平移、缩放、选择、拖拽、删除、基础吸附
+- 点击工具栏新建元素时，元素默认创建在当前视图中心
+- 可将选中元素收藏到素材库，并从素材库选择素材插入当前视图中心
+- 选择单个元素后可按 `x * y` 参数执行平铺复制
+- 选择多个元素后可执行水平/垂直对齐，并在目标轴向平均排布
+- `linear` 对象可配置线宽用于视觉区分（不影响工程量/成本）
 
 ### Data
 
@@ -358,7 +380,7 @@ Proposed
 
 - 定义 `Project / Layer / Room / Item / Task / Estimate` 模型
 - 定义 item kind、pricing mode、关系模型
-- 定义 YAML DTO、mapper、样例项目
+- 定义 YAML DTO、mapper、导入导出稳定格式
 
 ### Track 2 - Canvas Engine
 
@@ -393,6 +415,7 @@ Proposed
 3. Track 2 + Track 3 打通编辑器闭环
 4. Track 4 + Track 5 打通业务价值闭环
 5. YAML round-trip、素材库/标准素材、E2E smoke 验收
+6. Milestone 6 绘图计算优化能力与交互验收（已完成，持续回归）
 
 ## Follow-up Documents
 
