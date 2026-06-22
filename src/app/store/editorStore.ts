@@ -29,7 +29,15 @@ type EditorActions = {
   toggleLayerLock: (layerId: string) => void;
   addLayer: (name: string) => void;
   deleteSelectedLayer: () => void;
-  addPrimitive: (kind: PrimitiveKind) => void;
+  addPrimitive: (kind: PrimitiveKind, centerPoint?: Point) => void;
+  addPrimitiveFromTemplate: (
+    template: {
+      kind: PrimitiveKind;
+      points: Point[];
+      lineWidth?: number;
+    },
+    centerPoint: Point,
+  ) => void;
   addPolygons: (items: Array<{ name: string; points: Point[] }>) => void;
   updateSelectedPrimitiveDimensions: (dimensions: { widthMm: number; heightMm: number }) => void;
   updateSelectedPrimitivePoint: (pointIndex: number, point: Point) => void;
@@ -51,7 +59,11 @@ type EditorActions = {
   }) => void;
   updateSelectedItemName: (name: string) => void;
   updateSelectedItemTagColor: (color: string) => void;
+  updateSelectedItemLineWidth: (lineWidth: number) => void;
   updateProjectBudget: (update: Partial<ProjectBudget>) => void;
+  tileSelectedItem: (xCount: number, yCount: number) => void;
+  alignSelectedItemsHorizontal: () => void;
+  alignSelectedItemsVertical: () => void;
   copySelectedItem: () => void;
   duplicateItemById: (itemId: string) => void;
   deleteSelectedItem: () => void;
@@ -161,6 +173,57 @@ function pointAverage(points: Point[]): Point {
   };
 }
 
+function centerPointsAt(points: Point[], centerPoint: Point): Point[] {
+  if (points.length === 0) {
+    return points;
+  }
+
+  const currentCenter = pointAverage(points);
+  const delta = {
+    xMm: centerPoint.xMm - currentCenter.xMm,
+    yMm: centerPoint.yMm - currentCenter.yMm,
+  };
+
+  return points.map((point) => ({
+    xMm: point.xMm + delta.xMm,
+    yMm: point.yMm + delta.yMm,
+  }));
+}
+
+function movePointsBy(points: Point[], delta: Point): Point[] {
+  return points.map((point) => ({
+    xMm: point.xMm + delta.xMm,
+    yMm: point.yMm + delta.yMm,
+  }));
+}
+
+function getPointsBounds(points: Point[]) {
+  if (points.length === 0) {
+    return null;
+  }
+
+  let minX = points[0].xMm;
+  let maxX = points[0].xMm;
+  let minY = points[0].yMm;
+  let maxY = points[0].yMm;
+
+  points.slice(1).forEach((point) => {
+    minX = Math.min(minX, point.xMm);
+    maxX = Math.max(maxX, point.xMm);
+    minY = Math.min(minY, point.yMm);
+    maxY = Math.max(maxY, point.yMm);
+  });
+
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
 function rotatePoint(point: Point, center: Point, deltaDeg: number): Point {
   const radians = (deltaDeg * Math.PI) / 180;
   const translatedX = point.xMm - center.xMm;
@@ -203,6 +266,7 @@ function duplicateItemInState(state: EditorState, sourceItemId: string): Partial
       xMm: point.xMm + 20,
       yMm: point.yMm + 20,
     })),
+    lineWidth: sourceItem.lineWidth,
   };
 
   return {
@@ -305,6 +369,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         ...item,
         points: item.points.map((point) => ({ ...point })),
         pricing: item.pricing ? { ...item.pricing } : undefined,
+        lineWidth: item.lineWidth,
       })),
       projectBudget: { ...state.projectBudget },
     };
@@ -318,6 +383,99 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       items: state.items,
       projectBudget: state.projectBudget,
     };
+  }
+
+  function alignSelectedItems(
+    state: EditorStoreState,
+    axis: 'horizontal' | 'vertical',
+  ): PrimitiveItem[] {
+    const selectedItemIdSet = new Set(state.selectedItemIds);
+    const selectedItems = state.items.filter((item) => selectedItemIdSet.has(item.id));
+
+    if (selectedItems.length < 2) {
+      return state.items;
+    }
+
+    const mutableItems = selectedItems.filter(
+      (item) => !isLayerLocked(item.layerId, state.layers),
+    );
+
+    if (mutableItems.length < 2) {
+      return state.items;
+    }
+
+    const centers = mutableItems.map((item) => ({
+      item,
+      center: pointAverage(item.points),
+    }));
+
+    if (axis === 'horizontal') {
+      const targetY = centers.reduce((sum, entry) => sum + entry.center.yMm, 0) / centers.length;
+      const sorted = [...centers].sort((a, b) => a.center.xMm - b.center.xMm);
+      const minX = sorted[0].center.xMm;
+      const maxX = sorted[sorted.length - 1].center.xMm;
+      const step = sorted.length > 1 ? (maxX - minX) / (sorted.length - 1) : 0;
+      const targetById = new Map(
+        sorted.map((entry, index) => [
+          entry.item.id,
+          {
+            xMm: minX + step * index,
+            yMm: targetY,
+          },
+        ]),
+      );
+
+      return state.items.map((item) => {
+        const target = targetById.get(item.id);
+
+        if (!target) {
+          return item;
+        }
+
+        const center = pointAverage(item.points);
+
+        return {
+          ...item,
+          points: movePointsBy(item.points, {
+            xMm: target.xMm - center.xMm,
+            yMm: target.yMm - center.yMm,
+          }),
+        };
+      });
+    }
+
+    const targetX = centers.reduce((sum, entry) => sum + entry.center.xMm, 0) / centers.length;
+    const sorted = [...centers].sort((a, b) => a.center.yMm - b.center.yMm);
+    const minY = sorted[0].center.yMm;
+    const maxY = sorted[sorted.length - 1].center.yMm;
+    const step = sorted.length > 1 ? (maxY - minY) / (sorted.length - 1) : 0;
+    const targetById = new Map(
+      sorted.map((entry, index) => [
+        entry.item.id,
+        {
+          xMm: targetX,
+          yMm: minY + step * index,
+        },
+      ]),
+    );
+
+    return state.items.map((item) => {
+      const target = targetById.get(item.id);
+
+      if (!target) {
+        return item;
+      }
+
+      const center = pointAverage(item.points);
+
+      return {
+        ...item,
+        points: movePointsBy(item.points, {
+          xMm: target.xMm - center.xMm,
+          yMm: target.yMm - center.yMm,
+        }),
+      };
+    });
   }
 
   return createStore<EditorStoreState>((set) => {
@@ -425,7 +583,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         };
       });
     },
-    addPrimitive: (kind) => {
+    addPrimitive: (kind, centerPoint) => {
       setWithHistory((state) => {
         const layerId = state.selectedLayerId ?? state.layers[0]?.id;
         const selectedLayer = state.layers.find((layer) => layer.id === layerId);
@@ -439,9 +597,46 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
           name: `item-${state.items.length + 1}`,
           kind,
           layerId,
-          points: defaultPointsByKind(kind),
+          points: centerPoint
+            ? centerPointsAt(defaultPointsByKind(kind), centerPoint)
+            : defaultPointsByKind(kind),
           pricing: createDefaultItemPricingRule(),
           tagColor: DEFAULT_ITEM_TAG_COLOR,
+          ...(kind === 'polyline' ? { lineWidth: 1 } : {}),
+        };
+
+        return {
+          items: [...state.items, item],
+          selectedItemIds: [item.id],
+        };
+      });
+    },
+    addPrimitiveFromTemplate: (template, centerPoint) => {
+      setWithHistory((state) => {
+        const layerId = state.selectedLayerId ?? state.layers[0]?.id;
+        const selectedLayer = state.layers.find((layer) => layer.id === layerId);
+
+        if (
+          !layerId ||
+          !selectedLayer ||
+          !selectedLayer.visible ||
+          selectedLayer.locked ||
+          template.points.length === 0
+        ) {
+          return {};
+        }
+
+        const item: PrimitiveItem = {
+          id: createItemId(),
+          name: `item-${state.items.length + 1}`,
+          kind: template.kind,
+          layerId,
+          points: centerPointsAt(normalizeImportedPolygonPoints(template.points), centerPoint),
+          pricing: createDefaultItemPricingRule(),
+          tagColor: DEFAULT_ITEM_TAG_COLOR,
+          ...(template.kind === 'polyline'
+            ? { lineWidth: Math.max(1, template.lineWidth ?? 1) }
+            : {}),
         };
 
         return {
@@ -842,6 +1037,32 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         };
       });
     },
+    updateSelectedItemLineWidth: (lineWidth) => {
+      setWithHistory((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId || item.kind !== 'polyline') {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
+            return {
+              ...item,
+              lineWidth: Math.max(1, lineWidth),
+            };
+          }),
+        };
+      });
+    },
     updateProjectBudget: (update) => {
       setWithHistory((state) => ({
         projectBudget: {
@@ -851,6 +1072,76 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
               : Math.max(0, update.amount),
           currency: update.currency ?? state.projectBudget.currency,
         },
+      }));
+    },
+    tileSelectedItem: (xCount, yCount) => {
+      setWithHistory((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId || xCount < 1 || yCount < 1) {
+          return {};
+        }
+
+        const sourceItem = state.items.find((item) => item.id === selectedItemId);
+
+        if (!sourceItem || isLayerLocked(sourceItem.layerId, state.layers)) {
+          return {};
+        }
+
+        const bounds = getPointsBounds(sourceItem.points);
+
+        if (!bounds) {
+          return {};
+        }
+
+        const stepX = Math.max(1, bounds.width || 100);
+        const stepY = Math.max(1, bounds.height || 100);
+        const tiledItems: PrimitiveItem[] = [];
+
+        for (let row = 0; row < yCount; row += 1) {
+          for (let column = 0; column < xCount; column += 1) {
+            const points = movePointsBy(sourceItem.points, {
+              xMm: column * stepX,
+              yMm: row * stepY,
+            });
+
+            if (row === 0 && column === 0) {
+              tiledItems.push({
+                ...sourceItem,
+                points,
+              });
+              continue;
+            }
+
+            tiledItems.push({
+              ...sourceItem,
+              id: createItemId(),
+              name: `item-${state.items.length + tiledItems.length}`,
+              points,
+            });
+          }
+        }
+
+        return {
+          items: [
+            ...state.items.filter((item) => item.id !== sourceItem.id),
+            ...tiledItems,
+          ],
+          selectedItemIds:
+            tiledItems.length > 0
+              ? [tiledItems[tiledItems.length - 1].id]
+              : state.selectedItemIds,
+        };
+      });
+    },
+    alignSelectedItemsHorizontal: () => {
+      setWithHistory((state) => ({
+        items: alignSelectedItems(state, 'horizontal'),
+      }));
+    },
+    alignSelectedItemsVertical: () => {
+      setWithHistory((state) => ({
+        items: alignSelectedItems(state, 'vertical'),
       }));
     },
     appendSelectedPrimitivePoint: () => {
@@ -1019,10 +1310,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
 
             return {
               ...item,
-              points: item.points.map((point) => ({
-                xMm: point.xMm + delta.xMm,
-                yMm: point.yMm + delta.yMm,
-              })),
+              points: movePointsBy(item.points, delta),
             };
           }),
         };

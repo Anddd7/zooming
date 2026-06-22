@@ -18,7 +18,7 @@ Proposed
 - [x] 图层切换 + 线/矩形/多边形基础编辑（Milestone 2 slice 2）
 - [x] 图层面板 + 本地持久化 + 顶点/旋转编辑闭环（Milestone 2 interaction hardening）
 - [x] 落地工程量/成本/任务联动（Milestone 3 slice: pricing modes + measure/cost summary + budget compare + properties panel collapse）
-- [ ] 落地 YAML 导入导出与样例项目
+- [ ] 落地 YAML 导入导出与素材库/标准素材
 
 ## Related ADRs
 
@@ -288,7 +288,7 @@ Proposed
 
 - 项目导入/导出
 - 存储格式稳定化
-- 样例项目
+- 素材库与标准素材（可收藏当前对象并复用插入）
 
 ## Acceptance Criteria
 
@@ -392,7 +392,7 @@ Proposed
 2. Track 6 主题接入最小闭环
 3. Track 2 + Track 3 打通编辑器闭环
 4. Track 4 + Track 5 打通业务价值闭环
-5. YAML round-trip、样例项目、E2E smoke 验收
+5. YAML round-trip、素材库/标准素材、E2E smoke 验收
 
 ## Follow-up Documents
 

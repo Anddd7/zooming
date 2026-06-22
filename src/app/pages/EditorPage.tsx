@@ -29,9 +29,11 @@ import {
 import { DEFAULT_ITEM_TAG_COLOR } from "../../domains/drawing/PrimitiveItem";
 import {
   normalizeItemPricingRule,
+  type PrimitiveKind,
   type PricingMode,
 } from "../../domains/drawing/PrimitiveItem";
 import type { EditorStoreState } from "../store/editorStore";
+import type { Point } from "../../domains/geometry/Geometry";
 
 const EDITOR_STORAGE_KEY = "zooming.editor.snapshot.v1";
 const IMPORT_POLYGON_PROMPT_TEMPLATE =
@@ -51,6 +53,18 @@ const messages = {
     importPolygonsCopyFailed: "复制失败，请手动复制。",
     importPolygonsInput: "多边形 JSON",
     importPolygonsAction: "导入",
+    favorite: "收藏",
+    assetLibrary: "素材库",
+    tile: "平铺",
+    alignHorizontal: "水平对齐",
+    alignVertical: "垂直对齐",
+    tileDialogTitle: "平铺复制",
+    tileX: "平铺 X",
+    tileY: "平铺 Y",
+    applyTile: "执行平铺",
+    assetLibraryDialogTitle: "素材库",
+    insertAsset: "插入",
+    lineWidth: "线宽",
     cancel: "取消",
     importPolygonsInvalid: "JSON 格式无效：请检查多边形数据。",
     copySelected: "复制选中",
@@ -124,6 +138,18 @@ const messages = {
     importPolygonsCopyFailed: "Copy failed, please copy manually.",
     importPolygonsInput: "Polygon JSON",
     importPolygonsAction: "Import",
+    favorite: "Favorite",
+    assetLibrary: "Assets",
+    tile: "Tile",
+    alignHorizontal: "Align Horizontal",
+    alignVertical: "Align Vertical",
+    tileDialogTitle: "Tile Copy",
+    tileX: "Tile X",
+    tileY: "Tile Y",
+    applyTile: "Apply Tile",
+    assetLibraryDialogTitle: "Asset Library",
+    insertAsset: "Insert",
+    lineWidth: "Line Width",
     cancel: "Cancel",
     importPolygonsInvalid: "Invalid JSON format: please check polygon data.",
     copySelected: "Copy Selected",
@@ -207,6 +233,45 @@ type ImportedPolygonInput = Array<{
   points: { xMm: number; yMm: number }[];
 }>;
 
+type PrimitiveTemplate = {
+  name: string;
+  kind: PrimitiveKind;
+  points: Point[];
+  lineWidth?: number;
+};
+
+const STANDARD_ASSET_TEMPLATES: PrimitiveTemplate[] = [
+  {
+    name: "标准素材-门洞",
+    kind: "rect",
+    points: [
+      { xMm: -450, yMm: -50 },
+      { xMm: 450, yMm: -50 },
+      { xMm: 450, yMm: 50 },
+      { xMm: -450, yMm: 50 },
+    ],
+  },
+  {
+    name: "标准素材-双人沙发",
+    kind: "rect",
+    points: [
+      { xMm: -900, yMm: -400 },
+      { xMm: 900, yMm: -400 },
+      { xMm: 900, yMm: 400 },
+      { xMm: -900, yMm: 400 },
+    ],
+  },
+  {
+    name: "标准素材-墙线",
+    kind: "polyline",
+    lineWidth: 4,
+    points: [
+      { xMm: -800, yMm: 0 },
+      { xMm: 800, yMm: 0 },
+    ],
+  },
+];
+
 function parseImportedPolygonJson(raw: string): ImportedPolygonInput {
   const parsed = JSON.parse(raw) as unknown;
 
@@ -265,6 +330,39 @@ function edgeLengthMm(
   end: { xMm: number; yMm: number },
 ) {
   return Math.hypot(end.xMm - start.xMm, end.yMm - start.yMm);
+}
+
+function pointsCenter(points: Point[]): Point {
+  if (points.length === 0) {
+    return { xMm: 0, yMm: 0 };
+  }
+
+  const sum = points.reduce(
+    (acc, point) => ({
+      xMm: acc.xMm + point.xMm,
+      yMm: acc.yMm + point.yMm,
+    }),
+    { xMm: 0, yMm: 0 },
+  );
+
+  return {
+    xMm: sum.xMm / points.length,
+    yMm: sum.yMm / points.length,
+  };
+}
+
+function toTemplateFromItem(item: EditorStoreState["items"][number]): PrimitiveTemplate {
+  const center = pointsCenter(item.points);
+
+  return {
+    name: `收藏-${item.name ?? item.id}`,
+    kind: item.kind,
+    lineWidth: item.lineWidth,
+    points: item.points.map((point) => ({
+      xMm: point.xMm - center.xMm,
+      yMm: point.yMm - center.yMm,
+    })),
+  };
 }
 
 type PersistedEditorSnapshot = {
@@ -438,6 +536,12 @@ export function EditorPage() {
   const [isMaterialExpanded, setIsMaterialExpanded] = useState(false);
   const [isPositionExpanded, setIsPositionExpanded] = useState(false);
   const [isTagExpanded, setIsTagExpanded] = useState(false);
+  const [isAssetLibraryModalOpen, setIsAssetLibraryModalOpen] = useState(false);
+  const [isTileModalOpen, setIsTileModalOpen] = useState(false);
+  const [tileXDraft, setTileXDraft] = useState("2");
+  const [tileYDraft, setTileYDraft] = useState("2");
+  const [favoriteTemplates, setFavoriteTemplates] = useState<PrimitiveTemplate[]>([]);
+  const [viewportCenter, setViewportCenter] = useState<Point>({ xMm: 0, yMm: 0 });
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [isImportPolygonsModalOpen, setIsImportPolygonsModalOpen] =
     useState(false);
@@ -466,6 +570,13 @@ export function EditorPage() {
     [selectedItem],
   );
   const selectedItemTagColor = selectedItem?.tagColor ?? DEFAULT_ITEM_TAG_COLOR;
+  const availableTemplates = useMemo(
+    () => [
+      ...STANDARD_ASSET_TEMPLATES,
+      ...favoriteTemplates,
+    ],
+    [favoriteTemplates],
+  );
   const selectedItemLayer = selectedItem
     ? state.layers.find((layer) => layer.id === selectedItem.layerId)
     : null;
@@ -660,7 +771,7 @@ export function EditorPage() {
             className={iconButtonClass}
             aria-label={t("addLine")}
             title={t("addLine")}
-            onClick={() => state.addPrimitive("polyline")}
+            onClick={() => state.addPrimitive("polyline", viewportCenter)}
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
               <line
@@ -679,7 +790,7 @@ export function EditorPage() {
             className={iconButtonClass}
             aria-label={t("addRect")}
             title={t("addRect")}
-            onClick={() => state.addPrimitive("rect")}
+            onClick={() => state.addPrimitive("rect", viewportCenter)}
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
               <rect
@@ -698,7 +809,7 @@ export function EditorPage() {
             className={iconButtonClass}
             aria-label={t("addPolygon")}
             title={t("addPolygon")}
-            onClick={() => state.addPrimitive("polygon")}
+            onClick={() => state.addPrimitive("polygon", viewportCenter)}
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
               <path
@@ -726,6 +837,61 @@ export function EditorPage() {
             onClick={() => state.copySelectedItem()}
           >
             <DocumentDuplicateIcon className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className={iconButtonClass}
+            aria-label={t("favorite")}
+            title={t("favorite")}
+            onClick={() => {
+              const selected = state.items.find(
+                (item) => item.id === state.selectedItemIds[0],
+              );
+
+              if (!selected) {
+                return;
+              }
+
+              setFavoriteTemplates((current) => [...current, toTemplateFromItem(selected)]);
+            }}
+          >
+            ★
+          </button>
+          <button
+            type="button"
+            className={iconButtonClass}
+            aria-label={t("assetLibrary")}
+            title={t("assetLibrary")}
+            onClick={() => setIsAssetLibraryModalOpen(true)}
+          >
+            ▦
+          </button>
+          <button
+            type="button"
+            className={iconButtonClass}
+            aria-label={t("tile")}
+            title={t("tile")}
+            onClick={() => setIsTileModalOpen(true)}
+          >
+            ⊞
+          </button>
+          <button
+            type="button"
+            className={iconButtonClass}
+            aria-label={t("alignHorizontal")}
+            title={t("alignHorizontal")}
+            onClick={() => state.alignSelectedItemsHorizontal()}
+          >
+            ⇆
+          </button>
+          <button
+            type="button"
+            className={iconButtonClass}
+            aria-label={t("alignVertical")}
+            title={t("alignVertical")}
+            onClick={() => state.alignSelectedItemsVertical()}
+          >
+            ⇅
           </button>
           <button
             type="button"
@@ -917,6 +1083,26 @@ export function EditorPage() {
                   )}
                 </div>
               </div>
+              {selectedItem.kind === "polyline" ? (
+                <label className="block rounded border border-hairline bg-canvas/70 px-2 py-1">
+                  <span className="mb-0.5 block">{t("lineWidth")}</span>
+                  <input
+                    aria-label={t("lineWidth")}
+                    type="number"
+                    min={1}
+                    className="w-full rounded border border-hairline bg-canvas px-2 py-1"
+                    value={selectedItem.lineWidth ?? 1}
+                    disabled={isSelectedItemLayerLocked}
+                    onChange={(event) => {
+                      const nextValue = Number(event.target.value);
+
+                      if (!Number.isNaN(nextValue)) {
+                        state.updateSelectedItemLineWidth(nextValue);
+                      }
+                    }}
+                  />
+                </label>
+              ) : null}
               <div className="rounded border border-hairline bg-canvas/70 px-2 py-1">
                 <button
                   type="button"
@@ -1528,6 +1714,103 @@ export function EditorPage() {
             </div>
           </div>
         ) : null}
+        {isAssetLibraryModalOpen ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 p-4">
+            <div className="w-full max-w-xl rounded-lg border border-hairline bg-canvas p-3 shadow-md">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="font-semibold">{t("assetLibraryDialogTitle")}</div>
+                <button
+                  type="button"
+                  aria-label={t("close")}
+                  className="rounded border border-hairline bg-canvas/70 px-2 py-1"
+                  onClick={() => setIsAssetLibraryModalOpen(false)}
+                >
+                  {t("close")}
+                </button>
+              </div>
+              <div className="space-y-2">
+                {availableTemplates.map((template) => (
+                  <div
+                    key={`${template.name}-${template.kind}-${template.points.length}`}
+                    className="flex items-center justify-between rounded border border-hairline bg-canvas/70 px-2 py-1"
+                  >
+                    <span className="text-xs">{template.name}</span>
+                    <button
+                      type="button"
+                      className="rounded border border-hairline bg-canvas px-2 py-1 text-xs"
+                      aria-label={template.name}
+                      onClick={() => {
+                        state.addPrimitiveFromTemplate(template, viewportCenter);
+                        setIsAssetLibraryModalOpen(false);
+                      }}
+                    >
+                      {t("insertAsset")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {isTileModalOpen ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 p-4">
+            <div className="w-full max-w-sm rounded-lg border border-hairline bg-canvas p-3 shadow-md">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="font-semibold">{t("tileDialogTitle")}</div>
+                <button
+                  type="button"
+                  aria-label={t("close")}
+                  className="rounded border border-hairline bg-canvas/70 px-2 py-1"
+                  onClick={() => setIsTileModalOpen(false)}
+                >
+                  {t("close")}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label>
+                  <span className="mb-0.5 block text-xs">{t("tileX")}</span>
+                  <input
+                    aria-label={t("tileX")}
+                    type="number"
+                    min={1}
+                    className="w-full rounded border border-hairline bg-canvas/70 px-2 py-1"
+                    value={tileXDraft}
+                    onChange={(event) => setTileXDraft(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span className="mb-0.5 block text-xs">{t("tileY")}</span>
+                  <input
+                    aria-label={t("tileY")}
+                    type="number"
+                    min={1}
+                    className="w-full rounded border border-hairline bg-canvas/70 px-2 py-1"
+                    value={tileYDraft}
+                    onChange={(event) => setTileYDraft(event.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  className="rounded border border-hairline bg-canvas/70 px-3 py-1"
+                  onClick={() => {
+                    const x = Number(tileXDraft);
+                    const y = Number(tileYDraft);
+
+                    if (!Number.isNaN(x) && !Number.isNaN(y)) {
+                      state.tileSelectedItem(x, y);
+                    }
+
+                    setIsTileModalOpen(false);
+                  }}
+                >
+                  {t("applyTile")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <CanvasEditor
           items={state.items}
           layers={state.layers}
@@ -1586,6 +1869,7 @@ export function EditorPage() {
               delta,
             );
           }}
+          onViewportCenterChange={setViewportCenter}
         />
       </div>
     </section>

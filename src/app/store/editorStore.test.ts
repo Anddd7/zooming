@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import { createEditorStore } from './editorStore';
 
+function pointsCenter(points: Array<{ xMm: number; yMm: number }>) {
+  const sum = points.reduce(
+    (acc, point) => ({
+      xMm: acc.xMm + point.xMm,
+      yMm: acc.yMm + point.yMm,
+    }),
+    { xMm: 0, yMm: 0 },
+  );
+
+  return {
+    xMm: sum.xMm / points.length,
+    yMm: sum.yMm / points.length,
+  };
+}
+
 describe('createEditorStore', () => {
   it('uses default state values', () => {
     const store = createEditorStore();
@@ -66,6 +81,17 @@ describe('createEditorStore', () => {
     expect(createdItem.kind).toBe('rect');
     expect(createdItem.layerId).toBe('layer-default');
     expect(store.getState().selectedItemIds).toEqual([createdItem.id]);
+  });
+
+  it('addPrimitive centers new item when center point is provided', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect', { xMm: 1000, yMm: 800 });
+
+    const createdItem = store.getState().items[0];
+    const center = pointsCenter(createdItem.points);
+
+    expect(center).toEqual({ xMm: 1000, yMm: 800 });
   });
 
   it('addPrimitive does nothing when selected layer is hidden', () => {
@@ -250,6 +276,99 @@ describe('createEditorStore', () => {
     expect(store.getState().selectedItemIds).toEqual([store.getState().items[1].id]);
     expect(store.getState().items[1].name).toBe('item-2');
     expect(store.getState().items[1].points[0]).toEqual({ xMm: 160, yMm: 160 });
+  });
+
+  it('addPrimitiveFromTemplate inserts template centered at target point', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitiveFromTemplate(
+      {
+        kind: 'polyline',
+        points: [
+          { xMm: 0, yMm: 0 },
+          { xMm: 100, yMm: 0 },
+        ],
+        lineWidth: 6,
+      },
+      { xMm: 500, yMm: 300 },
+    );
+
+    const created = store.getState().items[0];
+    expect(created.kind).toBe('polyline');
+    expect(created.lineWidth).toBe(6);
+    expect(pointsCenter(created.points)).toEqual({ xMm: 500, yMm: 300 });
+  });
+
+  it('tileSelectedItem creates x*y layout and keeps original as first tile', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect');
+    store.getState().tileSelectedItem(2, 2);
+
+    const items = store.getState().items;
+    expect(items).toHaveLength(4);
+
+    const centers = items.map((item) => pointsCenter(item.points));
+    const xValues = [...new Set(centers.map((center) => Math.round(center.xMm)))].sort(
+      (a, b) => a - b,
+    );
+    const yValues = [...new Set(centers.map((center) => Math.round(center.yMm)))].sort(
+      (a, b) => a - b,
+    );
+
+    expect(xValues).toHaveLength(2);
+    expect(yValues).toHaveLength(2);
+  });
+
+  it('alignSelectedItemsHorizontal aligns y and distributes x evenly', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect', { xMm: 100, yMm: 120 });
+    const firstId = store.getState().items[0].id;
+    store.getState().addPrimitive('rect', { xMm: 260, yMm: 260 });
+    const secondId = store.getState().items[1].id;
+    store.getState().addPrimitive('rect', { xMm: 420, yMm: 420 });
+    const thirdId = store.getState().items[2].id;
+    store.getState().selectItems([firstId, secondId, thirdId]);
+
+    store.getState().alignSelectedItemsHorizontal();
+
+    const centers = store.getState().items.map((item) => pointsCenter(item.points));
+    const roundedY = centers.map((center) => Math.round(center.yMm));
+    const roundedX = centers.map((center) => Math.round(center.xMm)).sort((a, b) => a - b);
+
+    expect(new Set(roundedY).size).toBe(1);
+    expect(roundedX[1] - roundedX[0]).toBe(roundedX[2] - roundedX[1]);
+  });
+
+  it('alignSelectedItemsVertical aligns x and distributes y evenly', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect', { xMm: 120, yMm: 100 });
+    const firstId = store.getState().items[0].id;
+    store.getState().addPrimitive('rect', { xMm: 260, yMm: 260 });
+    const secondId = store.getState().items[1].id;
+    store.getState().addPrimitive('rect', { xMm: 420, yMm: 420 });
+    const thirdId = store.getState().items[2].id;
+    store.getState().selectItems([firstId, secondId, thirdId]);
+
+    store.getState().alignSelectedItemsVertical();
+
+    const centers = store.getState().items.map((item) => pointsCenter(item.points));
+    const roundedX = centers.map((center) => Math.round(center.xMm));
+    const roundedY = centers.map((center) => Math.round(center.yMm)).sort((a, b) => a - b);
+
+    expect(new Set(roundedX).size).toBe(1);
+    expect(roundedY[1] - roundedY[0]).toBe(roundedY[2] - roundedY[1]);
+  });
+
+  it('updateSelectedItemLineWidth updates selected polyline line width for visual rendering', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('polyline');
+    store.getState().updateSelectedItemLineWidth(5);
+
+    expect(store.getState().items[0].lineWidth).toBe(5);
   });
 
   it('rotateSelectedPrimitiveBy rotates selected primitive around center', () => {

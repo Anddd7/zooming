@@ -421,4 +421,15 @@ describe("CanvasEditor", () => {
     expect(Math.abs(delta.xMm)).toBeLessThan(1e-6);
     expect(Math.round(delta.yMm)).toBe(40);
   });
+
+  it("reports viewport center in world coordinates", () => {
+    const onViewportCenterChange = vi.fn();
+
+    render(<CanvasEditor onViewportCenterChange={onViewportCenterChange} />);
+
+    expect(onViewportCenterChange).toHaveBeenCalledWith({
+      xMm: 960,
+      yMm: 480,
+    });
+  });
 });
