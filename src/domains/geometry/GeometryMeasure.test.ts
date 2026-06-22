@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import type { Point, Rect } from './Geometry';
-import { polygonAreaMm2, polylineLengthMm, rectAreaMm2 } from './GeometryMeasure';
+import { polygonAreaMm2, polygonPerimeterMm, polylineLengthMm, rectAreaMm2 } from './GeometryMeasure';
 
 test('polyline simple segment length', () => {
   const points: Point[] = [
@@ -51,4 +51,17 @@ test('rect area', () => {
   const areaMm2 = rectAreaMm2(rect);
 
   assert.equal(areaMm2, 1200);
+});
+
+test('polygon perimeter', () => {
+  const points: Point[] = [
+    { xMm: 0, yMm: 0 },
+    { xMm: 10, yMm: 0 },
+    { xMm: 10, yMm: 20 },
+    { xMm: 0, yMm: 20 },
+  ];
+
+  const perimeterMm = polygonPerimeterMm(points);
+
+  assert.equal(perimeterMm, 60);
 });

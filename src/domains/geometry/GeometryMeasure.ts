@@ -33,6 +33,14 @@ export function polygonAreaMm2(points: Point[]): number {
   return Math.abs(twiceSignedArea) / 2;
 }
 
+export function polygonPerimeterMm(points: Point[]): number {
+  if (points.length < 2) {
+    return 0;
+  }
+
+  return polylineLengthMm([...points, points[0]]);
+}
+
 export function rectAreaMm2(rect: Rect): number {
   return rect.widthMm * rect.heightMm;
 }

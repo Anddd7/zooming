@@ -142,11 +142,13 @@ describe('createEditorStore', () => {
     const store = createEditorStore();
 
     store.getState().addPrimitive('rect');
+    const originalId = store.getState().items[0].id;
     store.getState().copySelectedItem();
 
     expect(store.getState().items).toHaveLength(2);
-    expect(store.getState().items[1].id).toBe('item-2');
-    expect(store.getState().selectedItemIds).toEqual(['item-2']);
+    expect(store.getState().items[1].id).not.toBe(originalId);
+    expect(store.getState().selectedItemIds).toEqual([store.getState().items[1].id]);
+    expect(store.getState().items[1].name).toBe('item-2');
     expect(store.getState().items[1].points[0]).toEqual({ xMm: 160, yMm: 160 });
   });
 

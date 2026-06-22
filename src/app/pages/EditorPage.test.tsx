@@ -19,6 +19,7 @@ describe("EditorPage", () => {
     expect(screen.getByRole("button", { name: "Delete Selected" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add Layer" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete Selected Layer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Budget" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select default layer" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Quick zoom" })).toBeInTheDocument();
   });
@@ -47,12 +48,13 @@ describe("EditorPage", () => {
     render(<EditorPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add Polygon" }));
+    fireEvent.click(screen.getByRole("button", { name: /Material & Pricing/i }));
 
-    expect(screen.getByText("Area (read-only)")).toBeInTheDocument();
+    expect(screen.getByText(/Estimate/i)).toBeInTheDocument();
     expect(screen.getByText(/mm²\s*\/\s*[0-9.]+\s*m²/i)).toBeInTheDocument();
     expect(screen.queryByDisplayValue("120")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Vertices" }));
+    fireEvent.click(screen.getByRole("button", { name: /Position/i }));
 
     expect(screen.getAllByDisplayValue("120").length).toBeGreaterThan(0);
   });
@@ -60,7 +62,7 @@ describe("EditorPage", () => {
   it("shows '-' in properties panel when no item selected", () => {
     render(<EditorPage />);
 
-    expect(screen.getByText("-")).toBeInTheDocument();
+    expect(screen.getByText("Properties")).toBeInTheDocument();
   });
 
   it("copies selected shape", () => {
@@ -69,13 +71,16 @@ describe("EditorPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Rect" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy Selected" }));
 
-    expect(screen.getByText(/rect\s·\sitem-2/i)).toBeInTheDocument();
+    expect(screen.getByText("item-2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "item-2" }));
+    expect(screen.getByRole("textbox", { name: "Item Title" })).toHaveValue("item-2");
   });
 
   it("supports entering rotation angle for selected shape", () => {
     render(<EditorPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add Rect" }));
+    fireEvent.click(screen.getByRole("button", { name: /Position/i }));
 
     const angleInput = screen.getByRole("spinbutton", {
       name: "Rotation angle",
@@ -89,6 +94,7 @@ describe("EditorPage", () => {
     render(<EditorPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add Rect" }));
+    fireEvent.click(screen.getByRole("button", { name: /Position/i }));
     fireEvent.click(screen.getByRole("button", { name: "+90°" }));
 
     const angleInput = screen.getByRole("spinbutton", { name: "Rotation angle" });
@@ -115,6 +121,7 @@ describe("EditorPage", () => {
         items: [
           {
             id: "item-1",
+            name: "item-1",
             kind: "polygon",
             layerId: "layer-default",
             points: [
@@ -122,15 +129,56 @@ describe("EditorPage", () => {
               { xMm: 260, yMm: 120 },
               { xMm: 220, yMm: 240 },
             ],
+            pricing: {
+              mode: "fixed",
+              unitPrice: 0,
+              wasteRate: 0,
+              materialName: "",
+            },
+            tagColor: "#64748b",
           },
         ],
+        projectBudget: { amount: 100000, currency: "CNY" },
         zoomLevel: 0.5,
       }),
     );
 
     render(<EditorPage />);
 
-    expect(screen.getByText(/polygon\s·\sitem-1/i)).toBeInTheDocument();
+    expect(screen.getByText("item-1")).toBeInTheDocument();
     expect(screen.getByText(/zoom:\s*0\.50x/i)).toBeInTheDocument();
+  });
+
+  it("supports editing selected item alias", () => {
+    render(<EditorPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Rect" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "item-1" }));
+
+    const titleInput = screen.getByRole("textbox", { name: "Item Title" });
+    fireEvent.change(titleInput, { target: { value: "Sofa" } });
+    fireEvent.keyDown(titleInput, { key: "Enter" });
+
+    expect(screen.getByText("Sofa")).toBeInTheDocument();
+  });
+
+  it("opens budget modal and shows estimation details table", () => {
+    render(<EditorPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Rect" }));
+    fireEvent.click(screen.getByRole("button", { name: "Budget" }));
+
+    expect(screen.getByText("Estimation / Budget")).toBeInTheDocument();
+    expect(screen.getByText("Estimation Details")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "item" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "material" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "price" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "quality" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "total" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close Budget" }));
+
+    expect(screen.queryByText("Estimation / Budget")).not.toBeInTheDocument();
   });
 });

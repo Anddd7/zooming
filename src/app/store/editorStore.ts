@@ -1,15 +1,24 @@
 import { createStore } from 'zustand/vanilla';
 
-import type { PrimitiveItem, PrimitiveKind } from '../../domains/drawing/PrimitiveItem';
+import {
+  DEFAULT_ITEM_TAG_COLOR,
+  createDefaultItemPricingRule,
+  normalizeItemPricingRule,
+  type PrimitiveItem,
+  type PrimitiveKind,
+  type PricingMode,
+} from '../../domains/drawing/PrimitiveItem';
 import type { Point } from '../../domains/geometry/Geometry';
 import { createLayer } from '../../domains/layer/LayerService';
 import type { Layer } from '../../domains/layer/Layer';
+import type { ProjectBudget } from '../../domains/project/ProjectAggregate';
 
 type EditorState = {
   selectedLayerId: string | null;
   selectedItemIds: string[];
   layers: Layer[];
   items: PrimitiveItem[];
+  projectBudget: ProjectBudget;
 };
 
 type EditorActions = {
@@ -17,6 +26,7 @@ type EditorActions = {
   selectSingleItem: (itemId: string) => void;
   selectItems: (itemIds: string[]) => void;
   toggleLayerVisibility: (layerId: string) => void;
+  toggleLayerLock: (layerId: string) => void;
   addLayer: (name: string) => void;
   deleteSelectedLayer: () => void;
   addPrimitive: (kind: PrimitiveKind) => void;
@@ -27,6 +37,15 @@ type EditorActions = {
   updateSelectedPrimitiveLayer: (layerId: string) => void;
   rotateSelectedPrimitiveBy: (deltaDeg: number) => void;
   rotateSelectedPrimitiveTo: (angleDeg: number) => void;
+  updateSelectedItemPricing: (update: {
+    mode?: PricingMode;
+    unitPrice?: number;
+    wasteRate?: number;
+    materialName?: string;
+  }) => void;
+  updateSelectedItemName: (name: string) => void;
+  updateSelectedItemTagColor: (color: string) => void;
+  updateProjectBudget: (update: Partial<ProjectBudget>) => void;
   copySelectedItem: () => void;
   deleteSelectedItem: () => void;
   moveSelectedItemBy: (delta: Point) => void;
@@ -46,7 +65,24 @@ const defaultEditorState: EditorState = {
   selectedItemIds: [],
   layers: defaultLayers,
   items: [],
+  projectBudget: {
+    amount: 100_000,
+    currency: 'CNY',
+  },
 };
+
+function normalizeItems(items: PrimitiveItem[] | undefined): PrimitiveItem[] {
+  if (!items) {
+    return [];
+  }
+
+  return items.map((item, index) => ({
+    ...item,
+    name: item.name ?? `item-${index + 1}`,
+    pricing: normalizeItemPricingRule(item.pricing),
+    tagColor: item.tagColor ?? DEFAULT_ITEM_TAG_COLOR,
+  }));
+}
 
 function createLayerId() {
   if (globalThis.crypto?.randomUUID) {
@@ -54,6 +90,14 @@ function createLayerId() {
   }
 
   return `layer-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function createItemId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `item-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
 function defaultPointsByKind(kind: PrimitiveKind): Point[] {
@@ -184,10 +228,19 @@ function updateRectCorner(points: Point[], pointIndex: number, point: Point): Po
   return points;
 }
 
+function isLayerLocked(layerId: string, layers: Layer[]): boolean {
+  return layers.find((layer) => layer.id === layerId)?.locked ?? false;
+}
+
 export function createEditorStore(initial: EditorStoreInitialState = {}) {
+  const normalizedInitialState: EditorStoreInitialState = {
+    ...initial,
+    items: normalizeItems(initial.items),
+  };
+
   return createStore<EditorStoreState>((set) => ({
     ...defaultEditorState,
-    ...initial,
+    ...normalizedInitialState,
     selectLayer: (layerId) => {
       set({ selectedLayerId: layerId });
     },
@@ -207,6 +260,20 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
           return {
             ...layer,
             visible: !layer.visible,
+          };
+        }),
+      }));
+    },
+    toggleLayerLock: (layerId) => {
+      set((state) => ({
+        layers: state.layers.map((layer) => {
+          if (layer.id !== layerId) {
+            return layer;
+          }
+
+          return {
+            ...layer,
+            locked: !layer.locked,
           };
         }),
       }));
@@ -263,10 +330,13 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         }
 
         const item: PrimitiveItem = {
-          id: `item-${state.items.length + 1}`,
+          id: createItemId(),
+          name: `item-${state.items.length + 1}`,
           kind,
           layerId,
           points: defaultPointsByKind(kind),
+          pricing: createDefaultItemPricingRule(),
+          tagColor: DEFAULT_ITEM_TAG_COLOR,
         };
 
         return {
@@ -286,6 +356,10 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         return {
           items: state.items.map((item) => {
             if (item.id !== selectedItemId || item.kind !== 'rect' || item.points.length !== 4) {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
               return item;
             }
 
@@ -349,6 +423,10 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
               return item;
             }
 
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
             if (item.kind === 'rect') {
               return {
                 ...item,
@@ -384,6 +462,10 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
               return item;
             }
 
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
             const center = pointAverage(item.points);
             return {
               ...item,
@@ -407,6 +489,10 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
               return item;
             }
 
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
             const center = pointAverage(item.points);
             const currentAngle = primitiveRotationDeg(item.points);
             const deltaDeg = angleDeg - currentAngle;
@@ -419,6 +505,109 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         };
       });
     },
+    updateSelectedItemPricing: (update) => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
+            const pricing = normalizeItemPricingRule(item.pricing);
+
+            return {
+              ...item,
+              pricing: {
+                ...pricing,
+                ...(update.mode !== undefined ? { mode: update.mode } : {}),
+                ...(update.unitPrice !== undefined
+                  ? { unitPrice: Math.max(0, update.unitPrice) }
+                  : {}),
+                ...(update.wasteRate !== undefined
+                  ? { wasteRate: Math.max(0, update.wasteRate) }
+                  : {}),
+                ...(update.materialName !== undefined
+                  ? { materialName: update.materialName }
+                  : {}),
+              },
+            };
+          }),
+        };
+      });
+    },
+    updateSelectedItemName: (name) => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
+            return {
+              ...item,
+              name,
+            };
+          }),
+        };
+      });
+    },
+    updateSelectedItemTagColor: (color) => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
+            return {
+              ...item,
+              tagColor: color,
+            };
+          }),
+        };
+      });
+    },
+    updateProjectBudget: (update) => {
+      set((state) => ({
+        projectBudget: {
+          amount:
+            update.amount === undefined
+              ? state.projectBudget.amount
+              : Math.max(0, update.amount),
+          currency: update.currency ?? state.projectBudget.currency,
+        },
+      }));
+    },
     appendSelectedPrimitivePoint: () => {
       set((state) => {
         const [selectedItemId] = state.selectedItemIds;
@@ -430,6 +619,10 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         return {
           items: state.items.map((item) => {
             if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
               return item;
             }
 
@@ -461,6 +654,10 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
               return item;
             }
 
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
             const minPointCount = item.kind === 'polyline' ? 2 : 3;
 
             if (item.points.length <= minPointCount) {
@@ -489,6 +686,10 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
               return item;
             }
 
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
             return {
               ...item,
               layerId,
@@ -511,9 +712,14 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
           return {};
         }
 
+        if (isLayerLocked(selectedItem.layerId, state.layers)) {
+          return {};
+        }
+
         const copiedItem: PrimitiveItem = {
           ...selectedItem,
-          id: `item-${state.items.length + 1}`,
+          id: createItemId(),
+          name: `item-${state.items.length + 1}`,
           points: selectedItem.points.map((point) => ({
             xMm: point.xMm + 20,
             yMm: point.yMm + 20,
@@ -534,6 +740,12 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
           return {};
         }
 
+        const selectedItem = state.items.find((item) => item.id === selectedItemId);
+
+        if (selectedItem && isLayerLocked(selectedItem.layerId, state.layers)) {
+          return {};
+        }
+
         return {
           items: state.items.filter((item) => item.id !== selectedItemId),
           selectedItemIds: [],
@@ -551,6 +763,10 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         return {
           items: state.items.map((item) => {
             if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
               return item;
             }
 

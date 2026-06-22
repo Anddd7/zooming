@@ -11,6 +11,8 @@ import {
 } from "./PrimitiveCanvas";
 
 function createMockContext() {
+  let strokeStyle = "";
+
   return {
     beginPath: vi.fn(),
     moveTo: vi.fn(),
@@ -18,7 +20,12 @@ function createMockContext() {
     closePath: vi.fn(),
     stroke: vi.fn(),
     fill: vi.fn(),
-    set strokeStyle(_: string) {},
+    set strokeStyle(value: string) {
+      strokeStyle = value;
+    },
+    get strokeStyle() {
+      return strokeStyle;
+    },
     set lineWidth(_: number) {},
     set fillStyle(_: string) {},
   } as unknown as CanvasRenderingContext2D;
@@ -48,6 +55,7 @@ describe("drawPrimitives", () => {
         id: "item-1",
         kind: "polyline",
         layerId: visibleLayer.id,
+        tagColor: "#ff0000",
         points: [
           { xMm: 0, yMm: 0 },
           { xMm: 100, yMm: 0 },
@@ -73,6 +81,7 @@ describe("drawPrimitives", () => {
     });
 
     expect(ctx.stroke).toHaveBeenCalledTimes(1);
+    expect((ctx as unknown as { strokeStyle: string }).strokeStyle).toBe("#ff0000");
   });
 });
 

@@ -1,4 +1,5 @@
 import type { PrimitiveItem } from "../../../domains/drawing/PrimitiveItem";
+import { DEFAULT_ITEM_TAG_COLOR } from "../../../domains/drawing/PrimitiveItem";
 import type { Point } from "../../../domains/geometry/Geometry";
 import type { Layer } from "../../../domains/layer/Layer";
 
@@ -105,6 +106,24 @@ function isPointNearPolyline(point: Point, polyline: Point[], toleranceMm: numbe
   return false;
 }
 
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = hex.replace("#", "");
+
+  if (normalized.length !== 6) {
+    return `rgba(100, 116, 139, ${alpha})`;
+  }
+
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+    return `rgba(100, 116, 139, ${alpha})`;
+  }
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function drawPrimitives(
   ctx: CanvasRenderingContext2D,
   items: PrimitiveItem[],
@@ -135,12 +154,13 @@ export function drawPrimitives(
     }
 
     const isSelected = selectedItemIdSet.has(item.id);
-    ctx.strokeStyle = isSelected ? "#2563eb" : "#334155";
+    const itemColor = item.tagColor ?? DEFAULT_ITEM_TAG_COLOR;
+    ctx.strokeStyle = itemColor;
     ctx.lineWidth = isSelected ? 2 : 1;
     ctx.stroke();
 
     if (item.kind === "rect" || item.kind === "polygon") {
-      ctx.fillStyle = "rgba(71, 85, 105, 0.1)";
+      ctx.fillStyle = hexToRgba(itemColor, 0.2);
       ctx.fill();
     }
 
