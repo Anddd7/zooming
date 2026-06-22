@@ -19,7 +19,7 @@ export const DEFAULT_ITEM_TAG_COLOR = "#64748b";
 
 export function createDefaultItemPricingRule(): ItemPricingRule {
   return {
-    mode: "fixed",
+    mode: "none",
     unitPrice: 0,
     wasteRate: 0,
     materialName: "",

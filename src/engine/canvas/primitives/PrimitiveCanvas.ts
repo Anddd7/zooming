@@ -24,6 +24,16 @@ const SHAPE_EDGE_HIT_TOLERANCE_MM = 4;
 const VERTEX_HIT_TOLERANCE_MM = 10;
 const VERTEX_RADIUS_PX = 4;
 
+function vertexAlias(index: number) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+  if (index < alphabet.length) {
+    return alphabet[index];
+  }
+
+  return `V${index + 1}`;
+}
+
 function isLayerVisible(layerId: string, layers: Layer[]) {
   const layer = layers.find((candidate) => candidate.id === layerId);
   return layer?.visible ?? false;
@@ -184,6 +194,10 @@ export function drawPrimitives(
         ctx.lineWidth = 1;
         ctx.fill();
         ctx.stroke();
+
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "11px sans-serif";
+        ctx.fillText(vertexAlias(pointIndex), screenPoint.x + 6, screenPoint.y - 6);
       });
     }
   });

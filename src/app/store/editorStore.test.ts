@@ -77,6 +77,57 @@ describe('createEditorStore', () => {
     expect(store.getState().items).toEqual([]);
   });
 
+  it('addPolygons creates polygon items in selected layer and selects last imported item', () => {
+    const store = createEditorStore();
+
+    store.getState().addPolygons([
+      {
+        name: '卧室A',
+        points: [
+          { xMm: 100, yMm: 100 },
+          { xMm: 300, yMm: 100 },
+          { xMm: 300, yMm: 260 },
+          { xMm: 100, yMm: 260 },
+        ],
+      },
+      {
+        name: '厨房',
+        points: [
+          { xMm: 320, yMm: 100 },
+          { xMm: 520, yMm: 100 },
+          { xMm: 520, yMm: 260 },
+          { xMm: 320, yMm: 260 },
+        ],
+      },
+    ]);
+
+    const items = store.getState().items;
+    expect(items).toHaveLength(2);
+    expect(items[0].kind).toBe('polygon');
+    expect(items[0].name).toBe('卧室A');
+    expect(items[0].layerId).toBe('layer-default');
+    expect(items[1].name).toBe('厨房');
+    expect(store.getState().selectedItemIds).toEqual([items[1].id]);
+  });
+
+  it('addPolygons does nothing when selected layer is hidden', () => {
+    const store = createEditorStore();
+    store.getState().toggleLayerVisibility('layer-default');
+
+    store.getState().addPolygons([
+      {
+        name: '过道',
+        points: [
+          { xMm: 1, yMm: 1 },
+          { xMm: 2, yMm: 1 },
+          { xMm: 2, yMm: 2 },
+        ],
+      },
+    ]);
+
+    expect(store.getState().items).toEqual([]);
+  });
+
   it('addLayer appends custom layer and selects it', () => {
     const store = createEditorStore();
 
@@ -138,6 +189,36 @@ describe('createEditorStore', () => {
     ]);
   });
 
+  it('updateSelectedPrimitiveEdgeLength updates polyline edge length by moving edge end', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('polyline');
+    store.getState().updateSelectedPrimitiveEdgeLength(0, 200);
+
+    const points = store.getState().items[0].points;
+    const edgeLength = Math.hypot(
+      points[1].xMm - points[0].xMm,
+      points[1].yMm - points[0].yMm,
+    );
+
+    expect(Math.round(edgeLength)).toBe(200);
+  });
+
+  it('updateSelectedPrimitiveEdgeLength updates polygon edge length by moving next vertex', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('polygon');
+    store.getState().updateSelectedPrimitiveEdgeLength(0, 180);
+
+    const points = store.getState().items[0].points;
+    const edgeLength = Math.hypot(
+      points[1].xMm - points[0].xMm,
+      points[1].yMm - points[0].yMm,
+    );
+
+    expect(Math.round(edgeLength)).toBe(180);
+  });
+
   it('copySelectedItem duplicates selected primitive with offset and new id', () => {
     const store = createEditorStore();
 
@@ -184,6 +265,31 @@ describe('createEditorStore', () => {
 
     expect(store.getState().items).toHaveLength(0);
     expect(store.getState().selectedItemIds).toEqual([]);
+  });
+
+  it('deleteSelectedItem removes all selected primitives together', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect');
+    store.getState().addPrimitive('polygon');
+    const ids = store.getState().items.map((item) => item.id);
+    store.getState().selectItems(ids);
+
+    store.getState().deleteSelectedItem();
+
+    expect(store.getState().items).toHaveLength(0);
+    expect(store.getState().selectedItemIds).toEqual([]);
+  });
+
+  it('undo reverts latest mutating action', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect');
+    expect(store.getState().items).toHaveLength(1);
+
+    store.getState().undo();
+
+    expect(store.getState().items).toHaveLength(0);
   });
 
   it('moveSelectedItemBy moves selected primitive points', () => {

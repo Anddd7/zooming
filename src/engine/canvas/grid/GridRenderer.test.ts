@@ -22,7 +22,7 @@ describe("drawGrid", () => {
       height: 200,
       pan: { offsetX: 20, offsetY: 10 },
       scale: 1,
-      spacingMm: 100,
+      spacingMm: 500,
     });
 
     expect(ctx.beginPath).toHaveBeenCalledTimes(1);

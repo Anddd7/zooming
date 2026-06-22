@@ -20,5 +20,6 @@ HTMLCanvasElement.prototype.getContext = vi.fn(() => {
     restore: vi.fn(),
     fillRect: vi.fn(),
     strokeRect: vi.fn(),
+    fillText: vi.fn(),
   } as unknown as CanvasRenderingContext2D;
 });

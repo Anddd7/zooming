@@ -232,4 +232,93 @@ describe("CanvasEditor", () => {
       { xMm: 120, yMm: 116 },
     );
   });
+
+  it("snaps moving selected item to 0.5m grid while shift pressed", () => {
+    const onSelectItem = vi.fn();
+    const onMoveSelectedBy = vi.fn();
+
+    render(
+      <CanvasEditor
+        layers={[
+          {
+            id: "layer-floorplan",
+            name: "Floor Plan",
+            category: "floorplan",
+            zIndex: 0,
+            visible: true,
+            locked: false,
+            opacity: 1,
+          },
+        ]}
+        items={[
+          {
+            id: "item-1",
+            kind: "rect",
+            layerId: "layer-floorplan",
+            points: [
+              { xMm: 100, yMm: 100 },
+              { xMm: 300, yMm: 100 },
+              { xMm: 300, yMm: 260 },
+              { xMm: 100, yMm: 260 },
+            ],
+          },
+        ]}
+        selectedItemIds={["item-1"]}
+        onSelectItem={onSelectItem}
+        onMoveSelectedBy={onMoveSelectedBy}
+      />, 
+    );
+
+    const canvas = screen.getByTestId("editor-canvas-surface");
+    fireEvent.mouseDown(canvas, { clientX: 100, clientY: 100, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 260, clientY: 260, shiftKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 260, clientY: 260 });
+
+    expect(onSelectItem).toHaveBeenCalledWith("item-1");
+    expect(onMoveSelectedBy).toHaveBeenCalledWith({ xMm: 300, yMm: 300 });
+  });
+
+  it("snaps vertex drag to 0.5m grid while shift pressed", () => {
+    const onMoveVertex = vi.fn();
+
+    render(
+      <CanvasEditor
+        layers={[
+          {
+            id: "layer-floorplan",
+            name: "Floor Plan",
+            category: "floorplan",
+            zIndex: 0,
+            visible: true,
+            locked: false,
+            opacity: 1,
+          },
+        ]}
+        items={[
+          {
+            id: "item-1",
+            kind: "polygon",
+            layerId: "layer-floorplan",
+            points: [
+              { xMm: 100, yMm: 100 },
+              { xMm: 240, yMm: 100 },
+              { xMm: 220, yMm: 200 },
+            ],
+          },
+        ]}
+        selectedItemIds={["item-1"]}
+        onMoveVertex={onMoveVertex}
+      />,
+    );
+
+    const canvas = screen.getByTestId("editor-canvas-surface");
+    fireEvent.mouseDown(canvas, { clientX: 50, clientY: 50, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 60, clientY: 58, shiftKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 60, clientY: 58 });
+
+    expect(onMoveVertex).toHaveBeenCalledWith(
+      { itemId: "item-1", pointIndex: 0 },
+      { xMm: 0, yMm: 0 },
+    );
+  });
 });

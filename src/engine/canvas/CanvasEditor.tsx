@@ -20,6 +20,8 @@ const MIN_ZOOM = 0.01;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.1;
 const WORLD_SCALE_AT_1X = 0.5;
+const GRID_SPACING_MM = 500;
+const SNAP_SPACING_MM = GRID_SPACING_MM;
 type CanvasEditorProps = {
   items?: PrimitiveItem[];
   layers?: Layer[];
@@ -56,6 +58,17 @@ const ROTATION_HANDLE_RADIUS_PX = 6;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function snapToGrid(point: Point, spacingMm: number): Point {
+  if (spacingMm <= 0) {
+    return point;
+  }
+
+  return {
+    xMm: Math.round(point.xMm / spacingMm) * spacingMm,
+    yMm: Math.round(point.yMm / spacingMm) * spacingMm,
+  };
 }
 
 export function CanvasEditor({
@@ -226,7 +239,7 @@ export function CanvasEditor({
       height: canvas.height,
       pan,
       scale: effectiveScale,
-      spacingMm: 100,
+      spacingMm: GRID_SPACING_MM,
     });
     drawPrimitives(context, items, layers, {
       worldToScreen: (point) =>
@@ -435,7 +448,10 @@ export function CanvasEditor({
 
           if (dragState.mode === "vertex") {
             const worldPoint = toWorldPoint(event);
-            onMoveVertex?.(dragState.vertexHit, worldPoint);
+            const nextPoint = event.shiftKey
+              ? snapToGrid(worldPoint, SNAP_SPACING_MM)
+              : worldPoint;
+            onMoveVertex?.(dragState.vertexHit, nextPoint);
             return;
           }
 
@@ -453,13 +469,16 @@ export function CanvasEditor({
           }
 
           const worldPoint = toWorldPoint(event);
+          const nextWorldPoint = event.shiftKey
+            ? snapToGrid(worldPoint, SNAP_SPACING_MM)
+            : worldPoint;
           const delta = {
-            xMm: worldPoint.xMm - dragState.worldPoint.xMm,
-            yMm: worldPoint.yMm - dragState.worldPoint.yMm,
+            xMm: nextWorldPoint.xMm - dragState.worldPoint.xMm,
+            yMm: nextWorldPoint.yMm - dragState.worldPoint.yMm,
           };
 
           onMoveSelectedBy?.(delta);
-          dragStateRef.current = { mode: "item", worldPoint };
+          dragStateRef.current = { mode: "item", worldPoint: nextWorldPoint };
         }}
         onMouseUp={(event) => {
           const dragState = dragStateRef.current;

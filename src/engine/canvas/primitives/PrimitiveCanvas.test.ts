@@ -28,6 +28,8 @@ function createMockContext() {
     },
     set lineWidth(_: number) {},
     set fillStyle(_: string) {},
+    set font(_: string) {},
+    fillText: vi.fn(),
   } as unknown as CanvasRenderingContext2D;
 }
 

@@ -7,6 +7,8 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
+  ArrowDownTrayIcon,
+  ClipboardDocumentIcon,
   DocumentDuplicateIcon,
   EyeIcon,
   EyeSlashIcon,
@@ -31,6 +33,238 @@ import {
 } from "../../domains/drawing/PrimitiveItem";
 
 const EDITOR_STORAGE_KEY = "zooming.editor.snapshot.v1";
+const IMPORT_POLYGON_PROMPT_TEMPLATE =
+  "以户型图左上角为(0,0)原点，X右Y下，单位mm；按图纸标注毫米尺寸累加计算边界；识别全部房间，每个房间多边形顶点严格顺时针排序；输出仅含房间名-顶点二维数组的纯JSON，无额外内容。";
+
+type Locale = "zh" | "en";
+
+const messages = {
+  zh: {
+    addLine: "添加线段",
+    addRect: "添加矩形",
+    addPolygon: "添加多边形",
+    importPolygons: "导入多边形",
+    importPolygonsDialogTitle: "导入户型多边形",
+    importPolygonsPromptLabel: "提示词",
+    importPolygonsCopyPrompt: "一键复制提示词",
+    importPolygonsCopyFailed: "复制失败，请手动复制。",
+    importPolygonsInput: "多边形 JSON",
+    importPolygonsAction: "导入",
+    cancel: "取消",
+    importPolygonsInvalid: "JSON 格式无效：请检查多边形数据。",
+    copySelected: "复制选中",
+    deleteSelected: "删除选中",
+    quickZoom: "快速缩放",
+    layers: "图层",
+    addLayer: "新增图层",
+    deleteSelectedLayer: "删除选中图层",
+    selectLayer: "选择图层",
+    lockLayer: "锁定图层",
+    unlockLayer: "解锁图层",
+    hideLayer: "隐藏图层",
+    showLayer: "显示图层",
+    properties: "属性",
+    itemTitle: "对象名称",
+    clickToEditAlias: "点击编辑名称",
+    layerLockedEditingDisabled: "图层已锁定：禁止编辑。",
+    cost: "成本",
+    notApplicable: "不适用",
+    materialPricing: "材质与计价",
+    material: "材质",
+    pricingMode: "计价模式",
+    pricingModeNone: "不计价",
+    pricingModeFixed: "固定价",
+    pricingModePerLength: "按长度",
+    pricingModePerArea: "按面积(mm²)",
+    pricingModePerAreaM2: "按面积(m²)",
+    price: "价格",
+    wasteRate: "损耗率",
+    estimate: "估算",
+    quantity: "数量",
+    position: "位置",
+    layer: "图层",
+    rotation: "旋转",
+    rotationAngle: "旋转角度",
+    widthMm: "宽 (mm)",
+    heightMm: "高 (mm)",
+    vertices: "顶点",
+    addPoint: "+ 顶点",
+    removePoint: "- 顶点",
+    tag: "标签",
+    color: "颜色",
+    budget: "预算",
+    estimationBudget: "估算 / 预算",
+    close: "关闭",
+    closeBudget: "关闭预算",
+    budgetAmount: "预算金额",
+    currency: "币种",
+    currentEstimation: "当前估算",
+    budgetLabel: "预算",
+    overBudget: "超预算",
+    withinBudget: "预算内",
+    estimationDetails: "估算明细",
+    tableItem: "项目",
+    tableMaterial: "材质",
+    tablePrice: "价格",
+    tableQuality: "工程量",
+    tableTotal: "总计",
+    language: "语言",
+    languageZh: "中文",
+    languageEn: "English",
+  },
+  en: {
+    addLine: "Add Line",
+    addRect: "Add Rect",
+    addPolygon: "Add Polygon",
+    importPolygons: "Import Polygons",
+    importPolygonsDialogTitle: "Import Floorplan Polygons",
+    importPolygonsPromptLabel: "Prompt",
+    importPolygonsCopyPrompt: "Copy prompt",
+    importPolygonsCopyFailed: "Copy failed, please copy manually.",
+    importPolygonsInput: "Polygon JSON",
+    importPolygonsAction: "Import",
+    cancel: "Cancel",
+    importPolygonsInvalid: "Invalid JSON format: please check polygon data.",
+    copySelected: "Copy Selected",
+    deleteSelected: "Delete Selected",
+    quickZoom: "Quick zoom",
+    layers: "Layers",
+    addLayer: "Add Layer",
+    deleteSelectedLayer: "Delete Selected Layer",
+    selectLayer: "Select layer",
+    lockLayer: "Lock layer",
+    unlockLayer: "Unlock layer",
+    hideLayer: "Hide layer",
+    showLayer: "Show layer",
+    properties: "Properties",
+    itemTitle: "Item Title",
+    clickToEditAlias: "Click to edit alias",
+    layerLockedEditingDisabled: "Layer locked: editing disabled.",
+    cost: "Cost",
+    notApplicable: "N/A",
+    materialPricing: "Material & Pricing",
+    material: "Material",
+    pricingMode: "Pricing Mode",
+    pricingModeNone: "none",
+    pricingModeFixed: "fixed",
+    pricingModePerLength: "perLength",
+    pricingModePerArea: "perArea",
+    pricingModePerAreaM2: "perAreaM2",
+    price: "Price",
+    wasteRate: "Waste Rate",
+    estimate: "Estimate",
+    quantity: "Qty",
+    position: "Position",
+    layer: "Layer",
+    rotation: "Rotation",
+    rotationAngle: "Rotation angle",
+    widthMm: "W (mm)",
+    heightMm: "H (mm)",
+    vertices: "Vertices",
+    addPoint: "+ Point",
+    removePoint: "- Point",
+    tag: "Tag",
+    color: "Color",
+    budget: "Budget",
+    estimationBudget: "Estimation / Budget",
+    close: "Close",
+    closeBudget: "Close Budget",
+    budgetAmount: "Budget Amount",
+    currency: "Currency",
+    currentEstimation: "Current Estimation",
+    budgetLabel: "Budget",
+    overBudget: "Over Budget",
+    withinBudget: "Within Budget",
+    estimationDetails: "Estimation Details",
+    tableItem: "item",
+    tableMaterial: "material",
+    tablePrice: "price",
+    tableQuality: "quality",
+    tableTotal: "total",
+    language: "Language",
+    languageZh: "中文",
+    languageEn: "English",
+  },
+} as const;
+
+type MessageKey = keyof (typeof messages)["zh"];
+
+type VertexDisplay = {
+  alias: string;
+  pointIndex: number;
+  point: { xMm: number; yMm: number };
+};
+
+type EdgeDisplay = {
+  name: string;
+  edgeIndex: number;
+  lengthMm: number;
+};
+
+type ImportedPolygonInput = Array<{
+  name: string;
+  points: { xMm: number; yMm: number }[];
+}>;
+
+function parseImportedPolygonJson(raw: string): ImportedPolygonInput {
+  const parsed = JSON.parse(raw) as unknown;
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("invalid root");
+  }
+
+  const entries = Object.entries(parsed);
+
+  if (entries.length === 0) {
+    throw new Error("empty polygons");
+  }
+
+  return entries.map(([name, vertices]) => {
+    if (!Array.isArray(vertices) || vertices.length < 3) {
+      throw new Error("invalid polygon vertices");
+    }
+
+    const points = vertices.map((vertex) => {
+      if (
+        !Array.isArray(vertex) ||
+        vertex.length !== 2 ||
+        typeof vertex[0] !== "number" ||
+        typeof vertex[1] !== "number" ||
+        !Number.isFinite(vertex[0]) ||
+        !Number.isFinite(vertex[1])
+      ) {
+        throw new Error("invalid point");
+      }
+
+      return {
+        xMm: vertex[0],
+        yMm: vertex[1],
+      };
+    });
+
+    return {
+      name,
+      points,
+    };
+  });
+}
+
+function vertexAlias(index: number) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+  if (index < alphabet.length) {
+    return alphabet[index];
+  }
+
+  return `V${index + 1}`;
+}
+
+function edgeLengthMm(
+  start: { xMm: number; yMm: number },
+  end: { xMm: number; yMm: number },
+) {
+  return Math.hypot(end.xMm - start.xMm, end.yMm - start.yMm);
+}
 
 type PersistedEditorSnapshot = {
   selectedLayerId: string | null;
@@ -206,8 +440,17 @@ export function EditorPage() {
   const [isPositionExpanded, setIsPositionExpanded] = useState(false);
   const [isTagExpanded, setIsTagExpanded] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [isImportPolygonsModalOpen, setIsImportPolygonsModalOpen] =
+    useState(false);
+  const [importPolygonJsonDraft, setImportPolygonJsonDraft] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [locale, setLocale] = useState<Locale>("zh");
   const [titleDraft, setTitleDraft] = useState("");
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
+  const t = useCallback(
+    (key: MessageKey) => messages[locale][key],
+    [locale],
+  );
   const estimateSummary = useMemo(
     () => summarizeEstimate(state.items),
     [state.items],
@@ -239,6 +482,50 @@ export function EditorPage() {
       ),
     [estimateSummary.itemEstimates],
   );
+  const vertexRows = useMemo<VertexDisplay[]>(() => {
+    if (!selectedItem) {
+      return [];
+    }
+
+    return selectedItem.points.map((point, pointIndex) => ({
+      alias: vertexAlias(pointIndex),
+      pointIndex,
+      point,
+    }));
+  }, [selectedItem]);
+  const edgeRows = useMemo<EdgeDisplay[]>(() => {
+    if (!selectedItem) {
+      return [];
+    }
+
+    const isPolyline = selectedItem.kind === "polyline";
+    const isPolygon = selectedItem.kind === "polygon";
+
+    if (!isPolyline && !isPolygon) {
+      return [];
+    }
+
+    const edgeCount = isPolyline
+      ? Math.max(0, selectedItem.points.length - 1)
+      : selectedItem.points.length;
+
+    return Array.from({ length: edgeCount }, (_, edgeIndex) => {
+      const startIndex = edgeIndex;
+      const endIndex = isPolyline
+        ? edgeIndex + 1
+        : (edgeIndex + 1) % selectedItem.points.length;
+      const startAlias = vertexAlias(startIndex);
+      const endAlias = vertexAlias(endIndex);
+      const startPoint = selectedItem.points[startIndex];
+      const endPoint = selectedItem.points[endIndex];
+
+      return {
+        name: `${startAlias}${endAlias}`,
+        edgeIndex,
+        lengthMm: edgeLengthMm(startPoint, endPoint),
+      };
+    });
+  }, [selectedItem]);
 
   useEffect(() => {
     if (!selectedItem) {
@@ -251,6 +538,69 @@ export function EditorPage() {
       setTitleDraft(selectedItem.name ?? "");
     }
   }, [selectedItem, isEditingTitle]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        Boolean(target?.isContentEditable);
+
+      if (event.key === "Escape") {
+        setIsBudgetModalOpen(false);
+        setIsImportPolygonsModalOpen(false);
+        setIsEditingTitle(false);
+        store.getState().selectItems([]);
+        return;
+      }
+
+      if (isTypingTarget) {
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+        const [selectedId] = store.getState().selectedItemIds;
+
+        if (selectedId) {
+          setCopiedItemId(selectedId);
+          event.preventDefault();
+        }
+
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        const fallbackSelectedId = store.getState().selectedItemIds[0] ?? null;
+        const sourceItemId = copiedItemId ?? fallbackSelectedId;
+
+        if (sourceItemId) {
+          store.getState().duplicateItemById(sourceItemId);
+          event.preventDefault();
+        }
+
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        store.getState().undo();
+        event.preventDefault();
+        return;
+      }
+
+      if (event.key === "Delete") {
+        store.getState().deleteSelectedItem();
+        event.preventDefault();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [copiedItemId, store]);
 
   const commitTitleEdit = useCallback(() => {
     if (!selectedItem) {
@@ -309,8 +659,8 @@ export function EditorPage() {
           <button
             type="button"
             className={iconButtonClass}
-            aria-label="Add Line"
-            title="Add Line"
+            aria-label={t("addLine")}
+            title={t("addLine")}
             onClick={() => state.addPrimitive("polyline")}
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -328,8 +678,8 @@ export function EditorPage() {
           <button
             type="button"
             className={iconButtonClass}
-            aria-label="Add Rect"
-            title="Add Rect"
+            aria-label={t("addRect")}
+            title={t("addRect")}
             onClick={() => state.addPrimitive("rect")}
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -347,8 +697,8 @@ export function EditorPage() {
           <button
             type="button"
             className={iconButtonClass}
-            aria-label="Add Polygon"
-            title="Add Polygon"
+            aria-label={t("addPolygon")}
+            title={t("addPolygon")}
             onClick={() => state.addPrimitive("polygon")}
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -363,8 +713,17 @@ export function EditorPage() {
           <button
             type="button"
             className={iconButtonClass}
-            aria-label="Copy Selected"
-            title="Copy Selected"
+            aria-label={t("importPolygons")}
+            title={t("importPolygons")}
+            onClick={() => setIsImportPolygonsModalOpen(true)}
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className={iconButtonClass}
+            aria-label={t("copySelected")}
+            title={t("copySelected")}
             onClick={() => state.copySelectedItem()}
           >
             <DocumentDuplicateIcon className="h-4 w-4" />
@@ -372,18 +731,18 @@ export function EditorPage() {
           <button
             type="button"
             className={iconButtonClass}
-            aria-label="Delete Selected"
-            title="Delete Selected"
+            aria-label={t("deleteSelected")}
+            title={t("deleteSelected")}
             onClick={() => state.deleteSelectedItem()}
           >
             <TrashIcon className="h-4 w-4" />
           </button>
         </div>
-        <div className="pointer-events-auto absolute right-2 top-12 z-10 w-64 rounded-lg border border-hairline bg-canvas/80 p-2 text-xs shadow-sm backdrop-blur">
+        <div className="pointer-events-auto absolute right-2 top-12 z-10 max-h-[200px] w-64 overflow-y-auto rounded-lg border border-hairline bg-canvas/80 p-2 text-xs shadow-sm backdrop-blur">
           <label className="mb-2 block">
-            <span className="mb-0.5 block text-[11px]">Quick zoom</span>
+            <span className="mb-0.5 block text-[11px]">{t("quickZoom")}</span>
             <select
-              aria-label="Quick zoom"
+              aria-label={t("quickZoom")}
               className="w-full rounded border border-hairline bg-canvas/70 px-2 py-1"
               value={String(zoomLevel)}
               onChange={(event) => {
@@ -402,12 +761,12 @@ export function EditorPage() {
             </select>
           </label>
           <div className="mb-2 flex items-center justify-between font-semibold">
-            <span>Layers</span>
+            <span>{t("layers")}</span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 className="grid h-6 w-6 place-items-center rounded border border-hairline bg-canvas/70"
-                aria-label="Add Layer"
+                aria-label={t("addLayer")}
                 onClick={() =>
                   state.addLayer(`Layer ${state.layers.length + 1}`)
                 }
@@ -417,7 +776,7 @@ export function EditorPage() {
               <button
                 type="button"
                 className="grid h-6 w-6 place-items-center rounded border border-hairline bg-canvas/70"
-                aria-label="Delete Selected Layer"
+                aria-label={t("deleteSelectedLayer")}
                 onClick={() => state.deleteSelectedLayer()}
               >
                 <MinusCircleIcon className="h-4 w-4" />
@@ -438,7 +797,7 @@ export function EditorPage() {
                 >
                   <button
                     type="button"
-                    aria-label={`Select ${layer.name} layer`}
+                    aria-label={`${t("selectLayer")} ${layer.name}`}
                     className="min-w-0 flex-1 truncate text-left"
                     onClick={() => state.selectLayer(layer.id)}
                   >
@@ -450,8 +809,8 @@ export function EditorPage() {
                       className="grid h-5 w-5 place-items-center rounded border border-hairline bg-canvas/70"
                       aria-label={
                         layer.locked
-                          ? `Unlock ${layer.name}`
-                          : `Lock ${layer.name}`
+                          ? `${t("unlockLayer")} ${layer.name}`
+                          : `${t("lockLayer")} ${layer.name}`
                       }
                       onClick={(event) => {
                         event.stopPropagation();
@@ -469,8 +828,8 @@ export function EditorPage() {
                       className="grid h-5 w-5 place-items-center rounded border border-hairline bg-canvas/70"
                       aria-label={
                         layer.visible
-                          ? `Hide ${layer.name}`
-                          : `Show ${layer.name}`
+                          ? `${t("hideLayer")} ${layer.name}`
+                          : `${t("showLayer")} ${layer.name}`
                       }
                       onClick={(event) => {
                         event.stopPropagation();
@@ -492,11 +851,11 @@ export function EditorPage() {
             })}
           </div>
         </div>
-        <div className="pointer-events-auto absolute right-2 top-[15rem] z-10 w-64 rounded-lg border border-hairline bg-canvas/80 p-2 text-xs shadow-sm backdrop-blur">
+        <div className="pointer-events-auto absolute right-2 top-[18rem] z-10 max-h-[700px] w-64 overflow-y-auto rounded-lg border border-hairline bg-canvas/80 p-2 text-xs shadow-sm backdrop-blur">
           {selectedItem ? (
             isEditingTitle ? (
               <input
-                aria-label="Item Title"
+                aria-label={t("itemTitle")}
                 className="w-full rounded border border-hairline bg-canvas/70 px-2 py-1 text-sm font-semibold"
                 value={titleDraft}
                 autoFocus
@@ -518,7 +877,7 @@ export function EditorPage() {
               <button
                 type="button"
                 className="w-full truncate text-left text-sm font-semibold"
-                title="Click to edit alias"
+                title={t("clickToEditAlias")}
                 onClick={() => {
                   if (isSelectedItemLayerLocked) {
                     return;
@@ -532,20 +891,20 @@ export function EditorPage() {
               </button>
             )
           ) : (
-            <div className="font-semibold">Properties</div>
+            <div className="font-semibold">{t("properties")}</div>
           )}
           {selectedItem ? (
             <div className="mt-2 space-y-2">
               {isSelectedItemLayerLocked ? (
                 <div className="rounded border border-hairline bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
-                  Layer locked: editing disabled.
+                  {t("layerLockedEditingDisabled")}
                 </div>
               ) : null}
               <div className="rounded border border-hairline bg-canvas/70 px-2 py-1 text-[11px] text-ink-muted-48">
-                <div className="font-medium text-body">Cost</div>
+                <div className="font-medium text-body">{t("cost")}</div>
                 <div className="mt-0.5">
                   {selectedItem.kind === "polyline"
-                    ? "N/A"
+                    ? t("notApplicable")
                     : (() => {
                         const areaMm2 = polygonAreaMm2(selectedItem.points);
                         const areaM2 = areaMm2 / 1_000_000;
@@ -565,15 +924,15 @@ export function EditorPage() {
                   className="flex w-full items-center justify-between text-left text-[11px] font-medium"
                   onClick={() => setIsMaterialExpanded((current) => !current)}
                 >
-                  <span>Material & Pricing</span>
+                  <span>{t("materialPricing")}</span>
                   <span>{isMaterialExpanded ? "−" : "+"}</span>
                 </button>
                 {isMaterialExpanded ? (
                   <div className="mt-1 space-y-1">
                     <label className="block">
-                      <span className="mb-0.5 block">Material</span>
+                      <span className="mb-0.5 block">{t("material")}</span>
                       <input
-                        aria-label="Material"
+                        aria-label={t("material")}
                         className="w-full rounded border border-hairline bg-canvas px-2 py-1"
                         value={selectedItemPricing.materialName}
                         disabled={isSelectedItemLayerLocked}
@@ -585,9 +944,9 @@ export function EditorPage() {
                       />
                     </label>
                     <label className="block">
-                      <span className="mb-0.5 block">Pricing Mode</span>
+                      <span className="mb-0.5 block">{t("pricingMode")}</span>
                       <select
-                        aria-label="Pricing Mode"
+                        aria-label={t("pricingMode")}
                         className="w-full rounded border border-hairline bg-canvas px-2 py-1"
                         value={selectedItemPricing.mode}
                         disabled={isSelectedItemLayerLocked}
@@ -597,18 +956,18 @@ export function EditorPage() {
                           })
                         }
                       >
-                        <option value="none">none</option>
-                        <option value="fixed">fixed</option>
-                        <option value="perLength">perLength</option>
-                        <option value="perArea">perArea</option>
-                        <option value="perAreaM2">perAreaM2</option>
+                        <option value="none">{t("pricingModeNone")}</option>
+                        <option value="fixed">{t("pricingModeFixed")}</option>
+                        <option value="perLength">{t("pricingModePerLength")}</option>
+                        <option value="perArea">{t("pricingModePerArea")}</option>
+                        <option value="perAreaM2">{t("pricingModePerAreaM2")}</option>
                       </select>
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       <label>
-                        <span className="mb-0.5 block">Price</span>
+                        <span className="mb-0.5 block">{t("price")}</span>
                         <input
-                          aria-label="Price"
+                          aria-label={t("price")}
                           type="number"
                           className="w-full rounded border border-hairline bg-canvas px-2 py-1"
                           value={selectedItemPricing.unitPrice}
@@ -625,9 +984,9 @@ export function EditorPage() {
                         />
                       </label>
                       <label>
-                        <span className="mb-0.5 block">Waste Rate</span>
+                        <span className="mb-0.5 block">{t("wasteRate")}</span>
                         <input
-                          aria-label="Waste Rate"
+                          aria-label={t("wasteRate")}
                           type="number"
                           step="0.01"
                           className="w-full rounded border border-hairline bg-canvas px-2 py-1"
@@ -647,16 +1006,16 @@ export function EditorPage() {
                     </div>
                     {selectedItemEstimate ? (
                       <div className="rounded border border-hairline bg-canvas/70 px-2 py-1 text-[11px] text-ink-muted-48">
-                        <div className="font-medium text-body">Estimate</div>
+                        <div className="font-medium text-body">{t("estimate")}</div>
                         <div className="mt-0.5">
-                          Qty:{" "}
+                          {t("quantity")}: {" "}
                           {formatQuantity(
                             selectedItemPricing.mode,
                             selectedItemEstimate.quantity,
                           )}
                         </div>
                         <div>
-                          Cost:{" "}
+                          {t("cost")}: {" "}
                           {formatCurrency(
                             selectedItemEstimate.cost,
                             state.projectBudget.currency,
@@ -673,13 +1032,13 @@ export function EditorPage() {
                   className="flex w-full items-center justify-between text-left text-[11px] font-medium"
                   onClick={() => setIsPositionExpanded((current) => !current)}
                 >
-                  <span>Position</span>
+                  <span>{t("position")}</span>
                   <span>{isPositionExpanded ? "−" : "+"}</span>
                 </button>
                 {isPositionExpanded ? (
                   <div className="mt-1 space-y-2">
                     <label className="block">
-                      <span className="mb-0.5 block">Layer</span>
+                      <span className="mb-0.5 block">{t("layer")}</span>
                       <select
                         className="w-full rounded border border-hairline bg-canvas px-2 py-1"
                         value={selectedItem.layerId}
@@ -697,11 +1056,11 @@ export function EditorPage() {
                     </label>
                     <div className="mt-1 space-y-2">
                       <div className="mb-1 text-[11px] font-medium">
-                        Rotation
+                        {t("rotation")}
                       </div>
                       <div className="grid grid-cols-[1fr_auto_auto] items-center gap-1">
                         <input
-                          aria-label="Rotation angle"
+                          aria-label={t("rotationAngle")}
                           type="number"
                           className="min-w-0 rounded border border-hairline bg-canvas/70 px-2 py-1"
                           value={Math.round(
@@ -738,7 +1097,7 @@ export function EditorPage() {
                     selectedItem.points.length === 4 ? (
                       <div className="grid grid-cols-2 gap-2">
                         <label>
-                          <span className="mb-0.5 block">W (mm)</span>
+                          <span className="mb-0.5 block">{t("widthMm")}</span>
                           <input
                             type="number"
                             className="w-full rounded border border-hairline bg-canvas px-2 py-1"
@@ -766,7 +1125,7 @@ export function EditorPage() {
                           />
                         </label>
                         <label>
-                          <span className="mb-0.5 block">H (mm)</span>
+                          <span className="mb-0.5 block">{t("heightMm")}</span>
                           <input
                             type="number"
                             className="w-full rounded border border-hairline bg-canvas px-2 py-1"
@@ -795,15 +1154,16 @@ export function EditorPage() {
                         </label>
                       </div>
                     ) : null}
-                    <div className="text-[11px] font-medium">Vertices</div>
-                    {selectedItem.points.map((point, pointIndex) => (
+                    <div className="text-[11px] font-medium">{t("vertices")}</div>
+                    {vertexRows.map(({ alias, pointIndex, point }) => (
                       <div
                         key={`${selectedItem.id}-point-${pointIndex}`}
-                        className="grid grid-cols-2 gap-1"
+                        className="grid grid-cols-[20px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1"
                       >
+                        <span className="text-[11px] text-ink-muted-48">{alias}</span>
                         <input
                           type="number"
-                          className="rounded border border-hairline bg-canvas px-2 py-1"
+                          className="min-w-0 w-full rounded border border-hairline bg-canvas px-2 py-1"
                           value={Math.round(point.xMm)}
                           disabled={isSelectedItemLayerLocked}
                           onChange={(event) => {
@@ -819,7 +1179,7 @@ export function EditorPage() {
                         />
                         <input
                           type="number"
-                          className="rounded border border-hairline bg-canvas px-2 py-1"
+                          className="min-w-0 w-full rounded border border-hairline bg-canvas px-2 py-1"
                           value={Math.round(point.yMm)}
                           disabled={isSelectedItemLayerLocked}
                           onChange={(event) => {
@@ -835,6 +1195,38 @@ export function EditorPage() {
                         />
                       </div>
                     ))}
+                    {edgeRows.length > 0 ? (
+                      <>
+                        <div className="mt-1 text-[11px] font-medium">Edges</div>
+                        {edgeRows.map((edge) => (
+                          <label
+                            key={`${selectedItem.id}-edge-${edge.name}`}
+                            className="grid grid-cols-[auto_1fr] items-center gap-1"
+                          >
+                            <span className="text-[11px] text-ink-muted-48">
+                              {edge.name}
+                            </span>
+                            <input
+                              aria-label={`Edge ${edge.name}`}
+                              type="number"
+                              className="rounded border border-hairline bg-canvas px-2 py-1"
+                              value={Math.round(edge.lengthMm)}
+                              disabled={isSelectedItemLayerLocked}
+                              onChange={(event) => {
+                                const nextLength = Number(event.target.value);
+
+                                if (!Number.isNaN(nextLength)) {
+                                  state.updateSelectedPrimitiveEdgeLength(
+                                    edge.edgeIndex,
+                                    nextLength,
+                                  );
+                                }
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </>
+                    ) : null}
                     {selectedItem.kind === "polyline" ||
                     selectedItem.kind === "polygon" ? (
                       <div className="flex gap-2">
@@ -844,7 +1236,7 @@ export function EditorPage() {
                           disabled={isSelectedItemLayerLocked}
                           onClick={() => state.appendSelectedPrimitivePoint()}
                         >
-                          + Point
+                          {t("addPoint")}
                         </button>
                         <button
                           type="button"
@@ -852,7 +1244,7 @@ export function EditorPage() {
                           disabled={isSelectedItemLayerLocked}
                           onClick={() => state.removeSelectedPrimitivePoint()}
                         >
-                          - Point
+                          {t("removePoint")}
                         </button>
                       </div>
                     ) : null}
@@ -865,15 +1257,15 @@ export function EditorPage() {
                   className="flex w-full items-center justify-between text-left text-[11px] font-medium"
                   onClick={() => setIsTagExpanded((current) => !current)}
                 >
-                  <span>Tag</span>
+                  <span>{t("tag")}</span>
                   <span>{isTagExpanded ? "−" : "+"}</span>
                 </button>
                 {isTagExpanded ? (
                   <div className="mt-1">
                     <label className="block">
-                      <span className="mb-0.5 block">Color</span>
+                      <span className="mb-0.5 block">{t("color")}</span>
                       <input
-                        aria-label="Tag Color"
+                        aria-label={`${t("tag")} ${t("color")}`}
                         type="color"
                         className="h-8 w-full rounded border border-hairline bg-canvas p-1"
                         value={selectedItemTagColor}
@@ -891,35 +1283,49 @@ export function EditorPage() {
             <div className="mt-2 text-[11px] text-ink-muted-48">-</div>
           )}
         </div>
+        <div className="pointer-events-auto absolute bottom-2 left-20 z-10 rounded-xl border border-hairline bg-canvas/80 p-2 text-xs shadow-sm backdrop-blur">
+          <label className="flex items-center gap-2">
+            <span>{t("language")}</span>
+            <select
+              aria-label={t("language")}
+              className="rounded border border-hairline bg-canvas/70 px-2 py-1"
+              value={locale}
+              onChange={(event) => setLocale(event.target.value as Locale)}
+            >
+              <option value="zh">{messages.zh.languageZh}</option>
+              <option value="en">{messages.en.languageEn}</option>
+            </select>
+          </label>
+        </div>
         <div className="pointer-events-auto absolute bottom-2 left-2 z-10 rounded-xl border border-hairline bg-canvas/80 p-2 text-xs shadow-sm backdrop-blur">
           <button
             type="button"
-            aria-label="Budget"
+            aria-label={t("budget")}
             className="rounded border border-hairline bg-canvas/70 px-3 py-1.5 font-medium"
             onClick={() => setIsBudgetModalOpen(true)}
           >
-            Budget
+            {t("budget")}
           </button>
         </div>
         {isBudgetModalOpen ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 p-4">
             <div className="w-full max-w-3xl rounded-lg border border-hairline bg-canvas p-3 shadow-md">
               <div className="mb-3 flex items-center justify-between">
-                <div className="font-semibold">Estimation / Budget</div>
+                <div className="font-semibold">{t("estimationBudget")}</div>
                 <button
                   type="button"
-                  aria-label="Close Budget"
+                  aria-label={t("closeBudget")}
                   className="rounded border border-hairline bg-canvas/70 px-2 py-1"
                   onClick={() => setIsBudgetModalOpen(false)}
                 >
-                  Close
+                  {t("close")}
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
-                  <span className="mb-0.5 block">Budget Amount</span>
+                  <span className="mb-0.5 block">{t("budgetAmount")}</span>
                   <input
-                    aria-label="Budget Amount"
+                    aria-label={t("budgetAmount")}
                     type="number"
                     className="w-full rounded border border-hairline bg-canvas/70 px-2 py-1"
                     value={state.projectBudget.amount}
@@ -933,9 +1339,9 @@ export function EditorPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-0.5 block">Currency</span>
+                  <span className="mb-0.5 block">{t("currency")}</span>
                   <input
-                    aria-label="Budget Currency"
+                    aria-label={t("currency")}
                     className="w-full rounded border border-hairline bg-canvas/70 px-2 py-1"
                     value={state.projectBudget.currency}
                     onChange={(event) =>
@@ -948,14 +1354,14 @@ export function EditorPage() {
               </div>
               <div className="mt-2 rounded border border-hairline bg-canvas/70 px-2 py-1 text-[11px]">
                 <div>
-                  Current Estimation:{" "}
+                  {t("currentEstimation")}: {" "}
                   {formatCurrency(
                     estimateSummary.totalCost,
                     state.projectBudget.currency,
                   )}
                 </div>
                 <div>
-                  Budget:{" "}
+                  {t("budgetLabel")}: {" "}
                   {formatCurrency(
                     state.projectBudget.amount,
                     state.projectBudget.currency,
@@ -964,22 +1370,22 @@ export function EditorPage() {
                 <div
                   className={overBudget ? "text-red-600" : "text-emerald-700"}
                 >
-                  {overBudget ? "Over Budget" : "Within Budget"}
+                  {overBudget ? t("overBudget") : t("withinBudget")}
                 </div>
               </div>
               <div className="mt-3 rounded border border-hairline bg-canvas/70 p-2 text-[11px]">
                 <div className="mb-2 font-medium text-body">
-                  Estimation Details
+                  {t("estimationDetails")}
                 </div>
                 <div className="max-h-72 overflow-auto">
                   <table className="w-full border-collapse text-left">
                     <thead>
                       <tr className="border-b border-hairline">
-                        <th className="px-1 py-1 font-medium">item</th>
-                        <th className="px-1 py-1 font-medium">material</th>
-                        <th className="px-1 py-1 font-medium">price</th>
-                        <th className="px-1 py-1 font-medium">quality</th>
-                        <th className="px-1 py-1 font-medium">total</th>
+                        <th className="px-1 py-1 font-medium">{t("tableItem")}</th>
+                        <th className="px-1 py-1 font-medium">{t("tableMaterial")}</th>
+                        <th className="px-1 py-1 font-medium">{t("tablePrice")}</th>
+                        <th className="px-1 py-1 font-medium">{t("tableQuality")}</th>
+                        <th className="px-1 py-1 font-medium">{t("tableTotal")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1030,6 +1436,94 @@ export function EditorPage() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {isImportPolygonsModalOpen ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 p-4">
+            <div className="w-full max-w-3xl rounded-lg border border-hairline bg-canvas p-3 shadow-md">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="font-semibold">{t("importPolygonsDialogTitle")}</div>
+                <button
+                  type="button"
+                  aria-label={t("close")}
+                  className="rounded border border-hairline bg-canvas/70 px-2 py-1"
+                  onClick={() => setIsImportPolygonsModalOpen(false)}
+                >
+                  {t("close")}
+                </button>
+              </div>
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="mb-1 block text-[11px]">
+                    {t("importPolygonsPromptLabel")}
+                  </span>
+                  <textarea
+                    aria-label={t("importPolygonsPromptLabel")}
+                    className="h-24 w-full rounded border border-hairline bg-canvas/70 px-2 py-1 text-xs"
+                    value={IMPORT_POLYGON_PROMPT_TEMPLATE}
+                    readOnly
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded border border-hairline bg-canvas/70 px-2 py-1 text-xs"
+                  aria-label={t("importPolygonsCopyPrompt")}
+                  onClick={async () => {
+                    try {
+                      await window.navigator.clipboard.writeText(
+                        IMPORT_POLYGON_PROMPT_TEMPLATE,
+                      );
+                    } catch {
+                      window.alert(t("importPolygonsCopyFailed"));
+                    }
+                  }}
+                >
+                  <ClipboardDocumentIcon className="h-4 w-4" />
+                  {t("importPolygonsCopyPrompt")}
+                </button>
+                <label className="block">
+                  <span className="mb-1 block text-[11px]">
+                    {t("importPolygonsInput")}
+                  </span>
+                  <textarea
+                    aria-label={t("importPolygonsInput")}
+                    className="h-56 w-full rounded border border-hairline bg-canvas/70 px-2 py-1 text-xs"
+                    placeholder='{"房间A": [[0, 0], [1000, 0], [1000, 800], [0, 800]]}'
+                    value={importPolygonJsonDraft}
+                    onChange={(event) =>
+                      setImportPolygonJsonDraft(event.target.value)
+                    }
+                  />
+                </label>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded border border-hairline bg-canvas/70 px-3 py-1"
+                    onClick={() => setIsImportPolygonsModalOpen(false)}
+                  >
+                    {t("cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border border-hairline bg-canvas/70 px-3 py-1 font-medium"
+                    onClick={() => {
+                      try {
+                        const polygons = parseImportedPolygonJson(
+                          importPolygonJsonDraft,
+                        );
+                        state.addPolygons(polygons);
+                        setIsImportPolygonsModalOpen(false);
+                        setImportPolygonJsonDraft("");
+                      } catch {
+                        window.alert(t("importPolygonsInvalid"));
+                      }
+                    }}
+                  >
+                    {t("importPolygonsAction")}
+                  </button>
                 </div>
               </div>
             </div>

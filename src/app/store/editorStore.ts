@@ -30,8 +30,10 @@ type EditorActions = {
   addLayer: (name: string) => void;
   deleteSelectedLayer: () => void;
   addPrimitive: (kind: PrimitiveKind) => void;
+  addPolygons: (items: Array<{ name: string; points: Point[] }>) => void;
   updateSelectedPrimitiveDimensions: (dimensions: { widthMm: number; heightMm: number }) => void;
   updateSelectedPrimitivePoint: (pointIndex: number, point: Point) => void;
+  updateSelectedPrimitiveEdgeLength: (edgeIndex: number, lengthMm: number) => void;
   appendSelectedPrimitivePoint: () => void;
   removeSelectedPrimitivePoint: () => void;
   updateSelectedPrimitiveLayer: (layerId: string) => void;
@@ -47,7 +49,9 @@ type EditorActions = {
   updateSelectedItemTagColor: (color: string) => void;
   updateProjectBudget: (update: Partial<ProjectBudget>) => void;
   copySelectedItem: () => void;
+  duplicateItemById: (itemId: string) => void;
   deleteSelectedItem: () => void;
+  undo: () => void;
   moveSelectedItemBy: (delta: Point) => void;
   clearSelection: () => void;
 };
@@ -55,6 +59,8 @@ type EditorActions = {
 export type EditorStoreState = EditorState & EditorActions;
 
 type EditorStoreInitialState = Partial<EditorState>;
+
+const HISTORY_LIMIT = 100;
 
 const defaultLayers: Layer[] = [
   createLayer({ id: 'layer-default', name: 'default', category: 'custom', zIndex: 0 }),
@@ -98,6 +104,13 @@ function createItemId() {
   }
 
   return `item-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function normalizeImportedPolygonPoints(points: Point[]): Point[] {
+  return points.map((point) => ({
+    xMm: point.xMm,
+    yMm: point.yMm,
+  }));
 }
 
 function defaultPointsByKind(kind: PrimitiveKind): Point[] {
@@ -167,6 +180,33 @@ function primitiveRotationDeg(points: Point[]): number {
   return (Math.atan2(second.yMm - first.yMm, second.xMm - first.xMm) * 180) / Math.PI;
 }
 
+function duplicateItemInState(state: EditorState, sourceItemId: string): Partial<EditorState> {
+  const sourceItem = state.items.find((item) => item.id === sourceItemId);
+
+  if (!sourceItem) {
+    return {};
+  }
+
+  if (isLayerLocked(sourceItem.layerId, state.layers)) {
+    return {};
+  }
+
+  const copiedItem: PrimitiveItem = {
+    ...sourceItem,
+    id: createItemId(),
+    name: `item-${state.items.length + 1}`,
+    points: sourceItem.points.map((point) => ({
+      xMm: point.xMm + 20,
+      yMm: point.yMm + 20,
+    })),
+  };
+
+  return {
+    items: [...state.items, copiedItem],
+    selectedItemIds: [copiedItem.id],
+  };
+}
+
 function normalizeVector(dx: number, dy: number) {
   const length = Math.hypot(dx, dy);
 
@@ -177,6 +217,17 @@ function normalizeVector(dx: number, dy: number) {
   return {
     x: dx / length,
     y: dy / length,
+  };
+}
+
+function edgeEndPointByLength(start: Point, end: Point, lengthMm: number): Point {
+  const direction = normalizeVector(end.xMm - start.xMm, end.yMm - start.yMm);
+  const unitDirection =
+    direction.x === 0 && direction.y === 0 ? { x: 1, y: 0 } : direction;
+
+  return {
+    xMm: start.xMm + unitDirection.x * lengthMm,
+    yMm: start.yMm + unitDirection.y * lengthMm,
   };
 }
 
@@ -238,7 +289,57 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
     items: normalizeItems(initial.items),
   };
 
-  return createStore<EditorStoreState>((set) => ({
+  const historyPast: EditorState[] = [];
+  const historyFuture: EditorState[] = [];
+
+  function cloneEditorState(state: EditorState): EditorState {
+    return {
+      selectedLayerId: state.selectedLayerId,
+      selectedItemIds: [...state.selectedItemIds],
+      layers: state.layers.map((layer) => ({ ...layer })),
+      items: state.items.map((item) => ({
+        ...item,
+        points: item.points.map((point) => ({ ...point })),
+        pricing: item.pricing ? { ...item.pricing } : undefined,
+      })),
+      projectBudget: { ...state.projectBudget },
+    };
+  }
+
+  function toEditorState(state: EditorStoreState): EditorState {
+    return {
+      selectedLayerId: state.selectedLayerId,
+      selectedItemIds: state.selectedItemIds,
+      layers: state.layers,
+      items: state.items,
+      projectBudget: state.projectBudget,
+    };
+  }
+
+  return createStore<EditorStoreState>((set) => {
+    function setWithHistory(
+      updater: (state: EditorStoreState) => Partial<EditorState>,
+    ) {
+      set((state) => {
+        const partial = updater(state);
+
+        if (Object.keys(partial).length === 0) {
+          return {};
+        }
+
+        historyPast.push(cloneEditorState(toEditorState(state)));
+
+        if (historyPast.length > HISTORY_LIMIT) {
+          historyPast.shift();
+        }
+
+        historyFuture.length = 0;
+
+        return partial;
+      });
+    }
+
+    return {
     ...defaultEditorState,
     ...normalizedInitialState,
     selectLayer: (layerId) => {
@@ -251,7 +352,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       set({ selectedItemIds: itemIds });
     },
     toggleLayerVisibility: (layerId) => {
-      set((state) => ({
+      setWithHistory((state) => ({
         layers: state.layers.map((layer) => {
           if (layer.id !== layerId) {
             return layer;
@@ -265,7 +366,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       }));
     },
     toggleLayerLock: (layerId) => {
-      set((state) => ({
+      setWithHistory((state) => ({
         layers: state.layers.map((layer) => {
           if (layer.id !== layerId) {
             return layer;
@@ -279,7 +380,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       }));
     },
     addLayer: (name) => {
-      set((state) => {
+      setWithHistory((state) => {
         const nextZIndex =
           state.layers.length === 0
             ? 0
@@ -300,7 +401,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     deleteSelectedLayer: () => {
-      set((state) => {
+      setWithHistory((state) => {
         const selectedLayerId = state.selectedLayerId;
 
         if (!selectedLayerId || state.layers.length <= 1) {
@@ -321,7 +422,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     addPrimitive: (kind) => {
-      set((state) => {
+      setWithHistory((state) => {
         const layerId = state.selectedLayerId ?? state.layers[0]?.id;
         const selectedLayer = state.layers.find((layer) => layer.id === layerId);
 
@@ -345,8 +446,39 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         };
       });
     },
+    addPolygons: (importedItems) => {
+      setWithHistory((state) => {
+        if (importedItems.length === 0) {
+          return {};
+        }
+
+        const layerId = state.selectedLayerId ?? state.layers[0]?.id;
+        const selectedLayer = state.layers.find((layer) => layer.id === layerId);
+
+        if (!layerId || !selectedLayer || !selectedLayer.visible || selectedLayer.locked) {
+          return {};
+        }
+
+        const nextItems = importedItems.map((importedItem, index) => ({
+          id: createItemId(),
+          name: importedItem.name.trim() || `item-${state.items.length + index + 1}`,
+          kind: 'polygon' as const,
+          layerId,
+          points: normalizeImportedPolygonPoints(importedItem.points),
+          pricing: createDefaultItemPricingRule(),
+          tagColor: DEFAULT_ITEM_TAG_COLOR,
+        }));
+
+        const lastItemId = nextItems[nextItems.length - 1]?.id;
+
+        return {
+          items: [...state.items, ...nextItems],
+          selectedItemIds: lastItemId ? [lastItemId] : state.selectedItemIds,
+        };
+      });
+    },
     updateSelectedPrimitiveDimensions: ({ widthMm, heightMm }) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -410,7 +542,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     updateSelectedPrimitivePoint: (pointIndex, point) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -448,8 +580,68 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         };
       });
     },
+    updateSelectedPrimitiveEdgeLength: (edgeIndex, lengthMm) => {
+      setWithHistory((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId || lengthMm < 0) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
+            const isPolyline = item.kind === 'polyline';
+            const isPolygon = item.kind === 'polygon';
+
+            if (!isPolyline && !isPolygon) {
+              return item;
+            }
+
+            const edgeCount = isPolyline
+              ? Math.max(0, item.points.length - 1)
+              : item.points.length;
+
+            if (edgeIndex < 0 || edgeIndex >= edgeCount) {
+              return item;
+            }
+
+            const startIndex = edgeIndex;
+            const endIndex = isPolyline
+              ? edgeIndex + 1
+              : (edgeIndex + 1) % item.points.length;
+            const startPoint = item.points[startIndex];
+            const endPoint = item.points[endIndex];
+
+            if (!startPoint || !endPoint) {
+              return item;
+            }
+
+            const nextPoints = item.points.map((point, index) => {
+              if (index !== endIndex) {
+                return point;
+              }
+
+              return edgeEndPointByLength(startPoint, endPoint, lengthMm);
+            });
+
+            return {
+              ...item,
+              points: nextPoints,
+            };
+          }),
+        };
+      });
+    },
     rotateSelectedPrimitiveBy: (deltaDeg) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -476,7 +668,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     rotateSelectedPrimitiveTo: (angleDeg) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -506,7 +698,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     updateSelectedItemPricing: (update) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -546,7 +738,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     updateSelectedItemName: (name) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -572,7 +764,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     updateSelectedItemTagColor: (color) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -598,7 +790,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     updateProjectBudget: (update) => {
-      set((state) => ({
+      setWithHistory((state) => ({
         projectBudget: {
           amount:
             update.amount === undefined
@@ -609,7 +801,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       }));
     },
     appendSelectedPrimitivePoint: () => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -641,7 +833,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     removeSelectedPrimitivePoint: () => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -673,7 +865,7 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     updateSelectedPrimitiveLayer: (layerId) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -699,61 +891,63 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
       });
     },
     copySelectedItem: () => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
           return {};
         }
 
-        const selectedItem = state.items.find((item) => item.id === selectedItemId);
-
-        if (!selectedItem) {
+        return duplicateItemInState(state, selectedItemId);
+      });
+    },
+    duplicateItemById: (itemId) => {
+      setWithHistory((state) => duplicateItemInState(state, itemId));
+    },
+    deleteSelectedItem: () => {
+      setWithHistory((state) => {
+        if (state.selectedItemIds.length === 0) {
           return {};
         }
 
-        if (isLayerLocked(selectedItem.layerId, state.layers)) {
+        const selectedItemIdSet = new Set(state.selectedItemIds);
+        const deletableItemIdSet = new Set(
+          state.items
+            .filter(
+              (item) =>
+                selectedItemIdSet.has(item.id) &&
+                !isLayerLocked(item.layerId, state.layers),
+            )
+            .map((item) => item.id),
+        );
+
+        if (deletableItemIdSet.size === 0) {
           return {};
         }
-
-        const copiedItem: PrimitiveItem = {
-          ...selectedItem,
-          id: createItemId(),
-          name: `item-${state.items.length + 1}`,
-          points: selectedItem.points.map((point) => ({
-            xMm: point.xMm + 20,
-            yMm: point.yMm + 20,
-          })),
-        };
 
         return {
-          items: [...state.items, copiedItem],
-          selectedItemIds: [copiedItem.id],
+          items: state.items.filter((item) => !deletableItemIdSet.has(item.id)),
+          selectedItemIds: state.selectedItemIds.filter(
+            (itemId) => !deletableItemIdSet.has(itemId),
+          ),
         };
       });
     },
-    deleteSelectedItem: () => {
+    undo: () => {
       set((state) => {
-        const [selectedItemId] = state.selectedItemIds;
+        const previousState = historyPast.pop();
 
-        if (!selectedItemId) {
+        if (!previousState) {
           return {};
         }
 
-        const selectedItem = state.items.find((item) => item.id === selectedItemId);
+        historyFuture.push(cloneEditorState(toEditorState(state)));
 
-        if (selectedItem && isLayerLocked(selectedItem.layerId, state.layers)) {
-          return {};
-        }
-
-        return {
-          items: state.items.filter((item) => item.id !== selectedItemId),
-          selectedItemIds: [],
-        };
+        return previousState;
       });
     },
     moveSelectedItemBy: (delta) => {
-      set((state) => {
+      setWithHistory((state) => {
         const [selectedItemId] = state.selectedItemIds;
 
         if (!selectedItemId) {
@@ -784,5 +978,6 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
     clearSelection: () => {
       set({ selectedLayerId: null, selectedItemIds: [] });
     },
-  }));
+    };
+  });
 }
