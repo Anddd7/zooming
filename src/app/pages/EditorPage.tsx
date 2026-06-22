@@ -9,7 +9,7 @@ export function EditorPage() {
   const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
 
   return (
-    <section>
+    <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <h2 className="text-lg font-semibold">Editor</h2>
 
       <div className="mt-3 flex flex-wrap gap-2 text-sm">
@@ -69,13 +69,15 @@ export function EditorPage() {
         <span className="ml-3">selected: {state.selectedItemIds[0] ?? "none"}</span>
       </div>
 
-      <CanvasEditor
-        items={state.items}
-        layers={state.layers}
-        selectedItemId={state.selectedItemIds[0] ?? null}
-        onSelectItem={(itemId) => state.selectSingleItem(itemId)}
-        onMoveSelectedBy={(delta) => state.moveSelectedItemBy(delta)}
-      />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <CanvasEditor
+          items={state.items}
+          layers={state.layers}
+          selectedItemId={state.selectedItemIds[0] ?? null}
+          onSelectItem={(itemId) => state.selectSingleItem(itemId)}
+          onMoveSelectedBy={(delta) => state.moveSelectedItemBy(delta)}
+        />
+      </div>
     </section>
   );
 }

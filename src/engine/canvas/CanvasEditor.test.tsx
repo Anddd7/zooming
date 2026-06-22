@@ -8,7 +8,10 @@ describe("CanvasEditor", () => {
   it("renders an actual canvas element", () => {
     render(<CanvasEditor />);
 
-    expect(screen.getByTestId("editor-canvas-surface")).toBeInTheDocument();
+    const canvas = screen.getByTestId("editor-canvas-surface");
+
+    expect(canvas).toBeInTheDocument();
+    expect(canvas).toHaveClass("touch-none");
   });
 
   it("supports pointer drag panning on the canvas", () => {

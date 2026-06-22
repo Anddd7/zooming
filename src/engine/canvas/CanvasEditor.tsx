@@ -106,7 +106,7 @@ export function CanvasEditor({
   return (
     <section
       data-testid="editor-canvas"
-      className="mt-4 min-h-[420px] rounded-md border border-hairline bg-canvas-parchment"
+      className="mt-4 flex h-full min-h-0 flex-col rounded-md border border-hairline bg-canvas-parchment"
       aria-label="2D canvas editor area"
     >
       <div className="p-2 text-xs text-ink-muted-48">
@@ -118,7 +118,7 @@ export function CanvasEditor({
         data-testid="editor-canvas-surface"
         width={DEFAULT_WIDTH}
         height={DEFAULT_HEIGHT}
-        className="block w-full"
+        className="block h-full min-h-0 w-full touch-none"
         onMouseDown={(event) => {
           if (event.button !== 0) {
             return;
