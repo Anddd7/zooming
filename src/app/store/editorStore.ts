@@ -15,6 +15,7 @@ type EditorState = {
 type EditorActions = {
   selectLayer: (layerId: string | null) => void;
   selectSingleItem: (itemId: string) => void;
+  selectItems: (itemIds: string[]) => void;
   toggleLayerVisibility: (layerId: string) => void;
   addPrimitive: (kind: PrimitiveKind) => void;
   deleteSelectedItem: () => void;
@@ -72,6 +73,9 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
     },
     selectSingleItem: (itemId) => {
       set({ selectedItemIds: [itemId] });
+    },
+    selectItems: (itemIds) => {
+      set({ selectedItemIds: itemIds });
     },
     toggleLayerVisibility: (layerId) => {
       set((state) => ({

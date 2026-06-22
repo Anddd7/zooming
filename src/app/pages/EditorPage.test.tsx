@@ -4,20 +4,34 @@ import { describe, expect, it } from "vitest";
 import { EditorPage } from "./EditorPage";
 
 describe("EditorPage", () => {
-  it("creates primitives from toolbar", () => {
+  it("shows operation buttons and layer toggles in floating toolbar", () => {
     render(<EditorPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Rect" }));
-
-    expect(screen.getByText(/items:\s*1/i)).toBeInTheDocument();
-    expect(screen.getByText(/selected:\s*item-1/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Line" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Rect" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Polygon" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete Selected" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Floor Plan" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Furniture" })).toBeInTheDocument();
   });
 
-  it("toggles layer visibility", () => {
+  it("toggles floor plan and furniture independently with selected state", () => {
     render(<EditorPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide Floor Plan" }));
+    const floorPlanButton = screen.getByRole("button", { name: "Floor Plan" });
+    const furnitureButton = screen.getByRole("button", { name: "Furniture" });
 
-    expect(screen.getByText(/floor plan \(hidden\)/i)).toBeInTheDocument();
+    expect(floorPlanButton).toHaveAttribute("aria-pressed", "true");
+    expect(furnitureButton).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(furnitureButton);
+
+    expect(floorPlanButton).toHaveAttribute("aria-pressed", "true");
+    expect(furnitureButton).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(floorPlanButton);
+
+    expect(floorPlanButton).toHaveAttribute("aria-pressed", "false");
+    expect(furnitureButton).toHaveAttribute("aria-pressed", "false");
   });
 });

@@ -28,6 +28,14 @@ describe('createEditorStore', () => {
     expect(store.getState().selectedItemIds).toEqual(['item-3']);
   });
 
+  it('selectItems sets all selected ids', () => {
+    const store = createEditorStore();
+
+    store.getState().selectItems(['item-1', 'item-2']);
+
+    expect(store.getState().selectedItemIds).toEqual(['item-1', 'item-2']);
+  });
+
   it('clearSelection clears item ids and layer id', () => {
     const store = createEditorStore({
       selectedLayerId: 'layer-1',

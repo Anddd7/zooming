@@ -5,6 +5,7 @@ import type { Layer } from "../../../domains/layer/Layer";
 import {
   drawPrimitives,
   hitTestPrimitive,
+  hitTestPrimitivesInWorldRect,
   movePrimitive,
 } from "./PrimitiveCanvas";
 
@@ -65,7 +66,7 @@ describe("drawPrimitives", () => {
 
     drawPrimitives(ctx, items, [visibleLayer, hiddenLayer], {
       worldToScreen: (point) => ({ x: point.xMm, y: point.yMm }),
-      selectedItemId: null,
+      selectedItemIds: [],
     });
 
     expect(ctx.stroke).toHaveBeenCalledTimes(1);
@@ -92,6 +93,81 @@ describe("hitTestPrimitive", () => {
 
     expect(hitId).toBe("rect-1");
   });
+
+  it("returns primitive id when click is on rect boundary", () => {
+    const items: PrimitiveItem[] = [
+      {
+        id: "rect-2",
+        kind: "rect",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 100, yMm: 100 },
+          { xMm: 300, yMm: 100 },
+          { xMm: 300, yMm: 240 },
+          { xMm: 100, yMm: 240 },
+        ],
+      },
+    ];
+
+    const hitId = hitTestPrimitive(items, [visibleLayer], { xMm: 100, yMm: 160 });
+
+    expect(hitId).toBe("rect-2");
+  });
+
+  it("returns polyline id when click is near line segment", () => {
+    const items: PrimitiveItem[] = [
+      {
+        id: "line-1",
+        kind: "polyline",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 100, yMm: 100 },
+          { xMm: 300, yMm: 100 },
+        ],
+      },
+    ];
+
+    const hitId = hitTestPrimitive(items, [visibleLayer], { xMm: 220, yMm: 104 });
+
+    expect(hitId).toBe("line-1");
+  });
+
+  it("returns primitive id when click is near polygon edge", () => {
+    const items: PrimitiveItem[] = [
+      {
+        id: "poly-1",
+        kind: "polygon",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 100, yMm: 100 },
+          { xMm: 240, yMm: 100 },
+          { xMm: 220, yMm: 200 },
+        ],
+      },
+    ];
+
+    const hitId = hitTestPrimitive(items, [visibleLayer], { xMm: 170, yMm: 103 });
+
+    expect(hitId).toBe("poly-1");
+  });
+
+  it("returns null when click is far from polyline", () => {
+    const items: PrimitiveItem[] = [
+      {
+        id: "line-2",
+        kind: "polyline",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 100, yMm: 100 },
+          { xMm: 300, yMm: 100 },
+        ],
+      },
+    ];
+
+    const hitId = hitTestPrimitive(items, [visibleLayer], { xMm: 220, yMm: 130 });
+
+    expect(hitId).toBeNull();
+  });
 });
 
 describe("movePrimitive", () => {
@@ -114,5 +190,43 @@ describe("movePrimitive", () => {
       { xMm: 45, yMm: 10 },
       { xMm: 35, yMm: 40 },
     ]);
+  });
+});
+
+describe("hitTestPrimitivesInWorldRect", () => {
+  it("returns item ids intersecting selection bounds", () => {
+    const items: PrimitiveItem[] = [
+      {
+        id: "rect-1",
+        kind: "rect",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 100, yMm: 100 },
+          { xMm: 200, yMm: 100 },
+          { xMm: 200, yMm: 200 },
+          { xMm: 100, yMm: 200 },
+        ],
+      },
+      {
+        id: "rect-2",
+        kind: "rect",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 400, yMm: 400 },
+          { xMm: 500, yMm: 400 },
+          { xMm: 500, yMm: 500 },
+          { xMm: 400, yMm: 500 },
+        ],
+      },
+    ];
+
+    const selectedIds = hitTestPrimitivesInWorldRect(
+      items,
+      [visibleLayer],
+      { xMm: 50, yMm: 50 },
+      { xMm: 250, yMm: 260 },
+    );
+
+    expect(selectedIds).toEqual(["rect-1"]);
   });
 });
