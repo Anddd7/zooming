@@ -6,7 +6,7 @@ afterEach(() => {
   cleanup();
 });
 
-HTMLCanvasElement.prototype.getContext = vi.fn(() => {
+HTMLCanvasElement.prototype.getContext = vi.fn((_contextId?: string) => {
   return {
     clearRect: vi.fn(),
     beginPath: vi.fn(),
@@ -21,5 +21,5 @@ HTMLCanvasElement.prototype.getContext = vi.fn(() => {
     fillRect: vi.fn(),
     strokeRect: vi.fn(),
     fillText: vi.fn(),
-  } as unknown as CanvasRenderingContext2D;
-});
+  } as unknown as ReturnType<HTMLCanvasElement["getContext"]>;
+}) as HTMLCanvasElement["getContext"];

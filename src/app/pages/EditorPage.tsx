@@ -31,6 +31,7 @@ import {
   normalizeItemPricingRule,
   type PricingMode,
 } from "../../domains/drawing/PrimitiveItem";
+import type { EditorStoreState } from "../store/editorStore";
 
 const EDITOR_STORAGE_KEY = "zooming.editor.snapshot.v1";
 const IMPORT_POLYGON_PROMPT_TEMPLATE =
@@ -269,11 +270,9 @@ function edgeLengthMm(
 type PersistedEditorSnapshot = {
   selectedLayerId: string | null;
   selectedItemIds: string[];
-  layers: ReturnType<typeof createEditorStore>["getState"]["layers"];
-  items: ReturnType<typeof createEditorStore>["getState"]["items"];
-  projectBudget: ReturnType<
-    typeof createEditorStore
-  >["getState"]["projectBudget"];
+  layers: EditorStoreState["layers"];
+  items: EditorStoreState["items"];
+  projectBudget: EditorStoreState["projectBudget"];
   zoomLevel: number;
 };
 

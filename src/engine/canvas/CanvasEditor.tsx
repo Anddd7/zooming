@@ -263,10 +263,12 @@ function snapItemDeltaWithPriority(
     }
   });
 
-  if (bestCorrection) {
+  if (bestCorrection !== null) {
+    const snappedCorrection = bestCorrection as Point;
+
     return {
-      xMm: rawDelta.xMm + bestCorrection.xMm,
-      yMm: rawDelta.yMm + bestCorrection.yMm,
+      xMm: rawDelta.xMm + snappedCorrection.xMm,
+      yMm: rawDelta.yMm + snappedCorrection.yMm,
     };
   }
 
