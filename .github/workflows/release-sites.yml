@@ -3,8 +3,8 @@ name: Release zooming to AliCloud OSS
 on:
   push:
     tags:
-      - "*"
-      - "*/*"
+    - "*"
+    - "*/*"
 
 permissions:
   contents: read
@@ -24,68 +24,62 @@ jobs:
       OSSUTIL_BIN_DIR: "${{ github.workspace }}/.local/bin"
 
     steps:
-      - name: Checkout source repository
-        uses: actions/checkout@v4
+    - name: Checkout source repository
+      uses: actions/checkout@v4
 
-      - name: Validate required secrets
-        env:
-          ALICLOUD_ACCESS_KEY: ${{ secrets.ALICLOUD_ACCESS_KEY }}
-          ALICLOUD_SECRET_KEY: ${{ secrets.ALICLOUD_SECRET_KEY }}
-          OSS_REGION: ${{ secrets.OSS_REGION }}
-          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
-          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
-          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
-          BASE_URL: ${{ secrets.BASE_URL }}
-        run: |
-          if [ -z "$ALICLOUD_ACCESS_KEY" ]; then
-            echo "Missing required secret: ALICLOUD_ACCESS_KEY"
-            exit 1
-          fi
+    - name: Validate required secrets
+      env:
+        ALICLOUD_ACCESS_KEY: ${{ secrets.ALICLOUD_ACCESS_KEY }}
+        ALICLOUD_SECRET_KEY: ${{ secrets.ALICLOUD_SECRET_KEY }}
+        OSS_REGION: ${{ secrets.OSS_REGION }}
+        OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+        OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+        OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+      run: |
+        if [ -z "$ALICLOUD_ACCESS_KEY" ]; then
+          echo "Missing required secret: ALICLOUD_ACCESS_KEY"
+          exit 1
+        fi
 
-          if [ -z "$ALICLOUD_SECRET_KEY" ]; then
-            echo "Missing required secret: ALICLOUD_SECRET_KEY"
-            exit 1
-          fi
+        if [ -z "$ALICLOUD_SECRET_KEY" ]; then
+          echo "Missing required secret: ALICLOUD_SECRET_KEY"
+          exit 1
+        fi
 
-          if [ -z "$OSS_REGION" ]; then
-            echo "Missing required secret: OSS_REGION"
-            exit 1
-          fi
+        if [ -z "$OSS_REGION" ]; then
+          echo "Missing required secret: OSS_REGION"
+          exit 1
+        fi
 
-          if [ -z "$OSS_ENDPOINT" ]; then
-            echo "Missing required secret: OSS_ENDPOINT"
-            exit 1
-          fi
+        if [ -z "$OSS_ENDPOINT" ]; then
+          echo "Missing required secret: OSS_ENDPOINT"
+          exit 1
+        fi
 
-          if [ -z "$OSS_BUCKET" ]; then
-            echo "Missing required secret: OSS_BUCKET"
-            exit 1
-          fi
+        if [ -z "$OSS_BUCKET" ]; then
+          echo "Missing required secret: OSS_BUCKET"
+          exit 1
+        fi
 
-          if [ -z "$OSS_PREFIX" ]; then
-            echo "Missing required secret: OSS_PREFIX"
-            exit 1
-          fi
+        if [ -z "$OSS_PREFIX" ]; then
+          echo "Missing required secret: OSS_PREFIX"
+          exit 1
+        fi
 
-          if [ -z "$BASE_URL" ]; then
-            echo "Missing required secret: BASE_URL"
-            exit 1
-          fi
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+        cache-dependency-path: package-lock.json
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
+    - name: Install dependencies
+      run: npm ci
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build zooming
-        run: npm run build
-        env:
-          VITE_BASE_URL: /zooming/
+    - name: Build zooming
+      run: npm run build
+      env:
+        VITE_BASE_URL: /zooming/
 
     - name: Cache ossutil
       id: cache-ossutil
