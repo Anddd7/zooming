@@ -27,6 +27,7 @@ const visibleLayer: Layer = {
   id: "layer-floorplan",
   name: "Floor Plan",
   category: "floorplan",
+  zIndex: 0,
   visible: true,
   locked: false,
   opacity: 1,

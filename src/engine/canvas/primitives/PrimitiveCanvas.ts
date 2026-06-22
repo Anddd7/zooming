@@ -20,6 +20,25 @@ function isLayerVisible(layerId: string, layers: Layer[]) {
   return layer?.visible ?? false;
 }
 
+function layerZIndexMap(layers: Layer[]) {
+  return new Map(layers.map((layer) => [layer.id, layer.zIndex]));
+}
+
+function sortItemsByLayerZIndex(items: PrimitiveItem[], layers: Layer[]) {
+  const zIndexByLayerId = layerZIndexMap(layers);
+
+  return [...items].sort((a, b) => {
+    const aZ = zIndexByLayerId.get(a.layerId) ?? 0;
+    const bZ = zIndexByLayerId.get(b.layerId) ?? 0;
+
+    if (aZ === bZ) {
+      return 0;
+    }
+
+    return aZ - bZ;
+  });
+}
+
 function isPointInPolygon(point: Point, polygon: Point[]) {
   let inside = false;
 
@@ -85,8 +104,9 @@ export function drawPrimitives(
   options: DrawOptions,
 ) {
   const selectedItemIdSet = new Set(options.selectedItemIds);
+  const sortedItems = sortItemsByLayerZIndex(items, layers);
 
-  items.forEach((item) => {
+  sortedItems.forEach((item) => {
     if (!isLayerVisible(item.layerId, layers) || item.points.length === 0) {
       return;
     }
@@ -184,8 +204,10 @@ export function hitTestPrimitive(
   layers: Layer[],
   worldPoint: Point,
 ): string | null {
-  for (let i = items.length - 1; i >= 0; i -= 1) {
-    const item = items[i];
+  const sortedItems = sortItemsByLayerZIndex(items, layers);
+
+  for (let i = sortedItems.length - 1; i >= 0; i -= 1) {
+    const item = sortedItems[i];
 
     if (!isLayerVisible(item.layerId, layers)) {
       continue;

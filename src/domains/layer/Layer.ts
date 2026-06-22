@@ -4,6 +4,7 @@ export interface Layer {
   id: string;
   name: string;
   category: LayerCategory;
+  zIndex: number;
   visible: boolean;
   locked: boolean;
   opacity: number;

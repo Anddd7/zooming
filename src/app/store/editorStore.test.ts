@@ -6,10 +6,11 @@ describe('createEditorStore', () => {
   it('uses default state values', () => {
     const store = createEditorStore();
 
-    expect(store.getState().selectedLayerId).toBe('layer-floorplan');
+    expect(store.getState().selectedLayerId).toBe('layer-default');
     expect(store.getState().selectedItemIds).toEqual([]);
     expect(store.getState().items).toEqual([]);
-    expect(store.getState().layers).toHaveLength(2);
+    expect(store.getState().layers).toHaveLength(1);
+    expect(store.getState().layers[0].zIndex).toBe(0);
   });
 
   it('selectLayer sets layer id', () => {
@@ -51,7 +52,7 @@ describe('createEditorStore', () => {
   it('toggleLayerVisibility flips a layer visible flag', () => {
     const store = createEditorStore();
 
-    store.getState().toggleLayerVisibility('layer-floorplan');
+    store.getState().toggleLayerVisibility('layer-default');
 
     expect(store.getState().layers[0].visible).toBe(false);
   });
@@ -63,8 +64,64 @@ describe('createEditorStore', () => {
 
     const createdItem = store.getState().items[0];
     expect(createdItem.kind).toBe('rect');
-    expect(createdItem.layerId).toBe('layer-floorplan');
+    expect(createdItem.layerId).toBe('layer-default');
     expect(store.getState().selectedItemIds).toEqual([createdItem.id]);
+  });
+
+  it('addPrimitive does nothing when selected layer is hidden', () => {
+    const store = createEditorStore();
+    store.getState().toggleLayerVisibility('layer-default');
+
+    store.getState().addPrimitive('rect');
+
+    expect(store.getState().items).toEqual([]);
+  });
+
+  it('addLayer appends custom layer and selects it', () => {
+    const store = createEditorStore();
+
+    store.getState().addLayer('Lighting');
+
+    const addedLayer = store.getState().layers[1];
+    expect(addedLayer.name).toBe('Lighting');
+    expect(addedLayer.category).toBe('custom');
+    expect(addedLayer.zIndex).toBe(1);
+    expect(store.getState().selectedLayerId).toBe(addedLayer.id);
+  });
+
+  it('addLayer uses unique uuid-like id for each layer even with same name', () => {
+    const store = createEditorStore();
+
+    store.getState().addLayer('Layer');
+    store.getState().addLayer('Layer');
+
+    const layerIds = store.getState().layers.map((layer) => layer.id);
+    const uniqueLayerIds = new Set(layerIds);
+
+    expect(uniqueLayerIds.size).toBe(layerIds.length);
+  });
+
+  it('updateSelectedPrimitiveDimensions updates selected rect width and height', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect');
+    store.getState().updateSelectedPrimitiveDimensions({ widthMm: 200, heightMm: 80 });
+
+    expect(store.getState().items[0].points).toEqual([
+      { xMm: 140, yMm: 140 },
+      { xMm: 340, yMm: 140 },
+      { xMm: 340, yMm: 220 },
+      { xMm: 140, yMm: 220 },
+    ]);
+  });
+
+  it('updateSelectedPrimitivePoint updates selected polygon vertex', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('polygon');
+    store.getState().updateSelectedPrimitivePoint(1, { xMm: 300, yMm: 150 });
+
+    expect(store.getState().items[0].points[1]).toEqual({ xMm: 300, yMm: 150 });
   });
 
   it('deleteSelectedItem removes selected primitive', () => {

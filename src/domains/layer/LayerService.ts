@@ -4,6 +4,7 @@ interface CreateLayerInput {
   id: string;
   name: string;
   category: LayerCategory;
+  zIndex?: number;
   visible?: boolean;
   locked?: boolean;
   opacity?: number;
@@ -14,6 +15,7 @@ export function createLayer(input: CreateLayerInput): Layer {
     id: input.id,
     name: input.name,
     category: input.category,
+    zIndex: input.zIndex ?? 0,
     visible: input.visible ?? true,
     locked: input.locked ?? false,
     opacity: input.opacity ?? 1,

@@ -17,7 +17,14 @@ type EditorActions = {
   selectSingleItem: (itemId: string) => void;
   selectItems: (itemIds: string[]) => void;
   toggleLayerVisibility: (layerId: string) => void;
+  addLayer: (name: string) => void;
+  deleteSelectedLayer: () => void;
   addPrimitive: (kind: PrimitiveKind) => void;
+  updateSelectedPrimitiveDimensions: (dimensions: { widthMm: number; heightMm: number }) => void;
+  updateSelectedPrimitivePoint: (pointIndex: number, point: Point) => void;
+  appendSelectedPrimitivePoint: () => void;
+  removeSelectedPrimitivePoint: () => void;
+  updateSelectedPrimitiveLayer: (layerId: string) => void;
   deleteSelectedItem: () => void;
   moveSelectedItemBy: (delta: Point) => void;
   clearSelection: () => void;
@@ -28,16 +35,23 @@ export type EditorStoreState = EditorState & EditorActions;
 type EditorStoreInitialState = Partial<EditorState>;
 
 const defaultLayers: Layer[] = [
-  createLayer({ id: 'layer-floorplan', name: 'Floor Plan', category: 'floorplan' }),
-  createLayer({ id: 'layer-furniture', name: 'Furniture', category: 'furniture' }),
+  createLayer({ id: 'layer-default', name: 'default', category: 'custom', zIndex: 0 }),
 ];
 
 const defaultEditorState: EditorState = {
-  selectedLayerId: 'layer-floorplan',
+  selectedLayerId: 'layer-default',
   selectedItemIds: [],
   layers: defaultLayers,
   items: [],
 };
+
+function createLayerId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `layer-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
 
 function defaultPointsByKind(kind: PrimitiveKind): Point[] {
   if (kind === 'polyline') {
@@ -91,11 +105,54 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         }),
       }));
     },
+    addLayer: (name) => {
+      set((state) => {
+        const nextZIndex =
+          state.layers.length === 0
+            ? 0
+            : Math.max(...state.layers.map((layer) => layer.zIndex)) + 1;
+        const nextLayerId = createLayerId();
+
+        const layer = createLayer({
+          id: nextLayerId,
+          name,
+          category: 'custom',
+          zIndex: nextZIndex,
+        });
+
+        return {
+          layers: [...state.layers, layer],
+          selectedLayerId: layer.id,
+        };
+      });
+    },
+    deleteSelectedLayer: () => {
+      set((state) => {
+        const selectedLayerId = state.selectedLayerId;
+
+        if (!selectedLayerId || state.layers.length <= 1) {
+          return {};
+        }
+
+        const remainingLayers = state.layers.filter((layer) => layer.id !== selectedLayerId);
+        const fallbackLayerId = remainingLayers[0]?.id ?? null;
+
+        return {
+          layers: remainingLayers,
+          items: state.items.filter((item) => item.layerId !== selectedLayerId),
+          selectedItemIds: state.selectedItemIds.filter(
+            (itemId) => state.items.find((item) => item.id === itemId)?.layerId !== selectedLayerId,
+          ),
+          selectedLayerId: fallbackLayerId,
+        };
+      });
+    },
     addPrimitive: (kind) => {
       set((state) => {
         const layerId = state.selectedLayerId ?? state.layers[0]?.id;
+        const selectedLayer = state.layers.find((layer) => layer.id === layerId);
 
-        if (!layerId) {
+        if (!layerId || !selectedLayer || !selectedLayer.visible || selectedLayer.locked) {
           return {};
         }
 
@@ -109,6 +166,143 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
         return {
           items: [...state.items, item],
           selectedItemIds: [item.id],
+        };
+      });
+    },
+    updateSelectedPrimitiveDimensions: ({ widthMm, heightMm }) => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId || item.kind !== 'rect' || item.points.length !== 4) {
+              return item;
+            }
+
+            const origin = item.points[0];
+            const safeWidth = Math.max(1, widthMm);
+            const safeHeight = Math.max(1, heightMm);
+
+            return {
+              ...item,
+              points: [
+                { xMm: origin.xMm, yMm: origin.yMm },
+                { xMm: origin.xMm + safeWidth, yMm: origin.yMm },
+                { xMm: origin.xMm + safeWidth, yMm: origin.yMm + safeHeight },
+                { xMm: origin.xMm, yMm: origin.yMm + safeHeight },
+              ],
+            };
+          }),
+        };
+      });
+    },
+    updateSelectedPrimitivePoint: (pointIndex, point) => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId || pointIndex < 0 || pointIndex >= item.points.length) {
+              return item;
+            }
+
+            return {
+              ...item,
+              points: item.points.map((existingPoint, existingPointIndex) => {
+                if (existingPointIndex !== pointIndex) {
+                  return existingPoint;
+                }
+
+                return point;
+              }),
+            };
+          }),
+        };
+      });
+    },
+    appendSelectedPrimitivePoint: () => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            const lastPoint = item.points[item.points.length - 1] ?? { xMm: 0, yMm: 0 };
+            const nextPoint = {
+              xMm: lastPoint.xMm + 40,
+              yMm: lastPoint.yMm + 40,
+            };
+
+            return {
+              ...item,
+              points: [...item.points, nextPoint],
+            };
+          }),
+        };
+      });
+    },
+    removeSelectedPrimitivePoint: () => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            const minPointCount = item.kind === 'polyline' ? 2 : 3;
+
+            if (item.points.length <= minPointCount) {
+              return item;
+            }
+
+            return {
+              ...item,
+              points: item.points.slice(0, -1),
+            };
+          }),
+        };
+      });
+    },
+    updateSelectedPrimitiveLayer: (layerId) => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            return {
+              ...item,
+              layerId,
+            };
+          }),
         };
       });
     },
