@@ -87,46 +87,44 @@ jobs:
         env:
           VITE_BASE_URL: /zooming/
 
-      - name: Cache ossutil
-        id: cache-ossutil
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.OSSUTIL_CACHE_DIR }}
-            ${{ env.OSSUTIL_BIN_DIR }}/ossutil
-          key: ossutil-${{ runner.os }}-amd64-${{ env.OSSUTIL_VERSION }}
+    - name: Cache ossutil
+      id: cache-ossutil
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.OSSUTIL_CACHE_DIR }}
+          ${{ env.OSSUTIL_BIN_DIR }}/ossutil
+        key: ossutil-${{ runner.os }}-amd64-${{ env.OSSUTIL_VERSION }}
 
-      - name: Install ossutil manually
-        if: steps.cache-ossutil.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p "$OSSUTIL_CACHE_DIR" "$OSSUTIL_BIN_DIR"
-          sudo apt install -y unzip
-          curl -fL -o "$OSSUTIL_CACHE_DIR/$OSSUTIL_ARCHIVE" "https://gosspublic.alicdn.com/ossutil/v2/${OSSUTIL_VERSION}/${OSSUTIL_ARCHIVE}"
-          unzip -o "$OSSUTIL_CACHE_DIR/$OSSUTIL_ARCHIVE" -d "$OSSUTIL_CACHE_DIR"
-          chmod 755 "$OSSUTIL_CACHE_DIR/ossutil-${OSSUTIL_VERSION}-linux-amd64/ossutil"
-          cp "$OSSUTIL_CACHE_DIR/ossutil-${OSSUTIL_VERSION}-linux-amd64/ossutil" "$OSSUTIL_BIN_DIR/ossutil"
+    - name: Install ossutil manually
+      if: steps.cache-ossutil.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p "$OSSUTIL_CACHE_DIR" "$OSSUTIL_BIN_DIR"
+        sudo apt install -y unzip
+        curl -fL -o "$OSSUTIL_CACHE_DIR/$OSSUTIL_ARCHIVE" "https://gosspublic.alicdn.com/ossutil/v2/${OSSUTIL_VERSION}/${OSSUTIL_ARCHIVE}"
+        unzip -o "$OSSUTIL_CACHE_DIR/$OSSUTIL_ARCHIVE" -d "$OSSUTIL_CACHE_DIR"
+        chmod 755 "$OSSUTIL_CACHE_DIR/ossutil-${OSSUTIL_VERSION}-linux-amd64/ossutil"
+        cp "$OSSUTIL_CACHE_DIR/ossutil-${OSSUTIL_VERSION}-linux-amd64/ossutil" "$OSSUTIL_BIN_DIR/ossutil"
 
-      - name: Add ossutil to PATH
-        run: |
-          mkdir -p "$OSSUTIL_BIN_DIR"
-          if [ ! -f "$OSSUTIL_BIN_DIR/ossutil" ]; then
-            echo "ossutil binary is missing after cache/installation"
-            exit 1
-          fi
-          chmod 755 "$OSSUTIL_BIN_DIR/ossutil"
-          echo "$OSSUTIL_BIN_DIR" >> "$GITHUB_PATH"
+    - name: Add ossutil to PATH
+      run: |
+        mkdir -p "$OSSUTIL_BIN_DIR"
+        if [ ! -f "$OSSUTIL_BIN_DIR/ossutil" ]; then
+          echo "ossutil binary is missing after cache/installation"
+          exit 1
+        fi
+        chmod 755 "$OSSUTIL_BIN_DIR/ossutil"
+        echo "$OSSUTIL_BIN_DIR" >> "$GITHUB_PATH"
 
-      - name: Deploy to OSS bucket
-        env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.ALICLOUD_ACCESS_KEY }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALICLOUD_SECRET_KEY }}
-          OSS_REGION: ${{ secrets.OSS_REGION }}
-          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
-          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
-          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
-          BASE_URL: ${{ secrets.BASE_URL }}
-        run: |
-          TARGET_PATH="oss://${OSS_BUCKET}/${OSS_PREFIX%/}/zooming/"
-          ossutil sync "dist/" "$TARGET_PATH" --delete --force
-          printf "%s\n" "${GITHUB_SHA}" | ossutil cp - "${TARGET_PATH}.source-commit" --force
-          printf "%s/zooming\n" "${BASE_URL%/}" | ossutil cp - "${TARGET_PATH}.base-url" --force
+    - name: Deploy to OSS bucket
+      env:
+        OSS_ACCESS_KEY_ID: ${{ secrets.ALICLOUD_ACCESS_KEY }}
+        OSS_ACCESS_KEY_SECRET: ${{ secrets.ALICLOUD_SECRET_KEY }}
+        OSS_REGION: ${{ secrets.OSS_REGION }}
+        OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+        OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+        OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+      run: |
+        TARGET_PATH="oss://${OSS_BUCKET}/${OSS_PREFIX%/}/"
+        ossutil sync "dist/" "$TARGET_PATH" --delete --force
+        printf "%s\n" "${GITHUB_SHA}" | ossutil cp - "${TARGET_PATH}.source-commit" --force
