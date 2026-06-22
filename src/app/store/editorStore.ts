@@ -133,24 +133,24 @@ function defaultPointsByKind(kind: PrimitiveKind): Point[] {
   if (kind === 'polyline') {
     return [
       { xMm: 100, yMm: 100 },
-      { xMm: 240, yMm: 120 },
-      { xMm: 340, yMm: 220 },
+      { xMm: 600, yMm: 100 },
+      { xMm: 1000, yMm: 200 },
     ];
   }
 
   if (kind === 'polygon') {
     return [
       { xMm: 120, yMm: 120 },
-      { xMm: 260, yMm: 120 },
-      { xMm: 220, yMm: 240 },
+      { xMm: 620, yMm: 120 },
+      { xMm: 420, yMm: 420 },
     ];
   }
 
   return [
     { xMm: 140, yMm: 140 },
-    { xMm: 320, yMm: 140 },
-    { xMm: 320, yMm: 260 },
-    { xMm: 140, yMm: 260 },
+    { xMm: 640, yMm: 140 },
+    { xMm: 640, yMm: 640 },
+    { xMm: 140, yMm: 640 },
   ];
 }
 

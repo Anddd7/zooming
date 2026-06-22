@@ -1716,7 +1716,7 @@ export function EditorPage() {
         ) : null}
         {isAssetLibraryModalOpen ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 p-4">
-            <div className="w-full max-w-xl rounded-lg border border-hairline bg-canvas p-3 shadow-md">
+            <div className="w-full max-w-2xl rounded-lg border border-hairline bg-canvas p-4 shadow-md">
               <div className="mb-3 flex items-center justify-between">
                 <div className="font-semibold">{t("assetLibraryDialogTitle")}</div>
                 <button
@@ -1728,16 +1728,16 @@ export function EditorPage() {
                   {t("close")}
                 </button>
               </div>
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
                 {availableTemplates.map((template) => (
                   <div
                     key={`${template.name}-${template.kind}-${template.points.length}`}
-                    className="flex items-center justify-between rounded border border-hairline bg-canvas/70 px-2 py-1"
+                    className="flex min-h-20 flex-col justify-between rounded border border-hairline bg-canvas/70 px-3 py-2"
                   >
-                    <span className="text-xs">{template.name}</span>
+                    <span className="text-xs font-medium">{template.name}</span>
                     <button
                       type="button"
-                      className="rounded border border-hairline bg-canvas px-2 py-1 text-xs"
+                      className="mt-2 rounded border border-hairline bg-canvas px-2 py-1 text-xs"
                       aria-label={template.name}
                       onClick={() => {
                         state.addPrimitiveFromTemplate(template, viewportCenter);
@@ -1754,7 +1754,7 @@ export function EditorPage() {
         ) : null}
         {isTileModalOpen ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20 p-4">
-            <div className="w-full max-w-sm rounded-lg border border-hairline bg-canvas p-3 shadow-md">
+            <div className="w-full max-w-2xl rounded-lg border border-hairline bg-canvas p-4 shadow-md">
               <div className="mb-3 flex items-center justify-between">
                 <div className="font-semibold">{t("tileDialogTitle")}</div>
                 <button
@@ -1766,8 +1766,8 @@ export function EditorPage() {
                   {t("close")}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <label>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="rounded border border-hairline bg-canvas/60 p-3">
                   <span className="mb-0.5 block text-xs">{t("tileX")}</span>
                   <input
                     aria-label={t("tileX")}
@@ -1778,7 +1778,7 @@ export function EditorPage() {
                     onChange={(event) => setTileXDraft(event.target.value)}
                   />
                 </label>
-                <label>
+                <label className="rounded border border-hairline bg-canvas/60 p-3">
                   <span className="mb-0.5 block text-xs">{t("tileY")}</span>
                   <input
                     aria-label={t("tileY")}
