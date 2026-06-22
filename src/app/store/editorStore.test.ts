@@ -219,6 +219,25 @@ describe('createEditorStore', () => {
     expect(Math.round(edgeLength)).toBe(180);
   });
 
+  it('moveSelectedPrimitiveEdgeBy moves both edge endpoints together', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect');
+    store.getState().moveSelectedPrimitiveEdgeBy(
+      {
+        startPointIndex: 0,
+        endPointIndex: 1,
+      },
+      { xMm: 0, yMm: 20 },
+    );
+
+    const points = store.getState().items[0].points;
+    expect(points[0]).toEqual({ xMm: 140, yMm: 160 });
+    expect(points[1]).toEqual({ xMm: 320, yMm: 160 });
+    expect(points[2]).toEqual({ xMm: 320, yMm: 260 });
+    expect(points[3]).toEqual({ xMm: 140, yMm: 260 });
+  });
+
   it('copySelectedItem duplicates selected primitive with offset and new id', () => {
     const store = createEditorStore();
 

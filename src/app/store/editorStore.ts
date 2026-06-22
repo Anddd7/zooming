@@ -34,6 +34,10 @@ type EditorActions = {
   updateSelectedPrimitiveDimensions: (dimensions: { widthMm: number; heightMm: number }) => void;
   updateSelectedPrimitivePoint: (pointIndex: number, point: Point) => void;
   updateSelectedPrimitiveEdgeLength: (edgeIndex: number, lengthMm: number) => void;
+  moveSelectedPrimitiveEdgeBy: (edge: {
+    startPointIndex: number;
+    endPointIndex: number;
+  }, delta: Point) => void;
   appendSelectedPrimitivePoint: () => void;
   removeSelectedPrimitivePoint: () => void;
   updateSelectedPrimitiveLayer: (layerId: string) => void;
@@ -635,6 +639,55 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
             return {
               ...item,
               points: nextPoints,
+            };
+          }),
+        };
+      });
+    },
+    moveSelectedPrimitiveEdgeBy: (edge, delta) => {
+      setWithHistory((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            if (isLayerLocked(item.layerId, state.layers)) {
+              return item;
+            }
+
+            if (
+              edge.startPointIndex < 0 ||
+              edge.startPointIndex >= item.points.length ||
+              edge.endPointIndex < 0 ||
+              edge.endPointIndex >= item.points.length
+            ) {
+              return item;
+            }
+
+            const updatedIndexSet = new Set([
+              edge.startPointIndex,
+              edge.endPointIndex,
+            ]);
+
+            return {
+              ...item,
+              points: item.points.map((point, index) => {
+                if (!updatedIndexSet.has(index)) {
+                  return point;
+                }
+
+                return {
+                  xMm: point.xMm + delta.xMm,
+                  yMm: point.yMm + delta.yMm,
+                };
+              }),
             };
           }),
         };

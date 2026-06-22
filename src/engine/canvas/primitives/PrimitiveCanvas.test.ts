@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { PrimitiveItem } from "../../../domains/drawing/PrimitiveItem";
 import type { Layer } from "../../../domains/layer/Layer";
 import {
+  collectVisiblePrimitiveEdges,
   drawPrimitives,
+  hitTestEdge,
   hitTestVertex,
   hitTestPrimitive,
   hitTestPrimitivesInWorldRect,
@@ -105,6 +107,32 @@ describe("hitTestVertex", () => {
     const vertexHit = hitTestVertex(items, [visibleLayer], { xMm: 102, yMm: 101 }, ["poly-vertex"]);
 
     expect(vertexHit).toEqual({ itemId: "poly-vertex", pointIndex: 0 });
+  });
+});
+
+describe("hitTestEdge", () => {
+  it("returns selected edge hit result when cursor is near edge", () => {
+    const items: PrimitiveItem[] = [
+      {
+        id: "rect-edge",
+        kind: "rect",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 100, yMm: 100 },
+          { xMm: 300, yMm: 100 },
+          { xMm: 300, yMm: 200 },
+          { xMm: 100, yMm: 200 },
+        ],
+      },
+    ];
+
+    const edgeHit = hitTestEdge(items, [visibleLayer], { xMm: 200, yMm: 102 }, ["rect-edge"]);
+
+    expect(edgeHit).toEqual({
+      itemId: "rect-edge",
+      startPointIndex: 0,
+      endPointIndex: 1,
+    });
   });
 });
 
@@ -263,5 +291,51 @@ describe("hitTestPrimitivesInWorldRect", () => {
     );
 
     expect(selectedIds).toEqual(["rect-1"]);
+  });
+});
+
+describe("collectVisiblePrimitiveEdges", () => {
+  it("collects edges for visible primitives and excludes specified items", () => {
+    const items: PrimitiveItem[] = [
+      {
+        id: "poly-1",
+        kind: "polygon",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 0, yMm: 0 },
+          { xMm: 100, yMm: 0 },
+          { xMm: 100, yMm: 100 },
+        ],
+      },
+      {
+        id: "line-1",
+        kind: "polyline",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 200, yMm: 200 },
+          { xMm: 300, yMm: 200 },
+        ],
+      },
+      {
+        id: "hidden-1",
+        kind: "rect",
+        layerId: hiddenLayer.id,
+        points: [
+          { xMm: 0, yMm: 0 },
+          { xMm: 10, yMm: 0 },
+          { xMm: 10, yMm: 10 },
+          { xMm: 0, yMm: 10 },
+        ],
+      },
+    ];
+
+    const edges = collectVisiblePrimitiveEdges(
+      items,
+      [visibleLayer, hiddenLayer],
+      new Set(["line-1"]),
+    );
+
+    expect(edges).toHaveLength(3);
+    expect(edges.every((edge) => edge.itemId === "poly-1")).toBe(true);
   });
 });

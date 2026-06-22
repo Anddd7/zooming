@@ -1568,6 +1568,25 @@ export function EditorPage() {
             state.selectSingleItem(vertex.itemId);
             state.updateSelectedPrimitivePoint(vertex.pointIndex, point);
           }}
+          onMoveSelectedEdgeBy={(edgeHit, delta) => {
+            const selected = state.items.find((item) => item.id === edgeHit.itemId);
+            const selectedLayer = selected
+              ? state.layers.find((layer) => layer.id === selected.layerId)
+              : null;
+
+            if (!selected || selectedLayer?.locked) {
+              return;
+            }
+
+            state.selectSingleItem(edgeHit.itemId);
+            state.moveSelectedPrimitiveEdgeBy(
+              {
+                startPointIndex: edgeHit.startPointIndex,
+                endPointIndex: edgeHit.endPointIndex,
+              },
+              delta,
+            );
+          }}
         />
       </div>
     </section>

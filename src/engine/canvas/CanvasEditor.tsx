@@ -8,9 +8,11 @@ import { createViewportTransform } from "./viewport/ViewportTransform";
 import { drawGrid } from "./grid/GridRenderer";
 import {
   drawPrimitives,
+  hitTestEdge,
   hitTestPrimitive,
   hitTestPrimitivesInWorldRect,
   hitTestVertex,
+  type EdgeHit,
   type VertexHit,
 } from "./primitives/PrimitiveCanvas";
 
@@ -22,6 +24,8 @@ const ZOOM_STEP = 0.1;
 const WORLD_SCALE_AT_1X = 0.5;
 const GRID_SPACING_MM = 500;
 const SNAP_SPACING_MM = GRID_SPACING_MM;
+const SHAPE_SNAP_TOLERANCE_MM = 40;
+const GRID_SNAP_TOLERANCE_MM = 30;
 type CanvasEditorProps = {
   items?: PrimitiveItem[];
   layers?: Layer[];
@@ -33,13 +37,15 @@ type CanvasEditorProps = {
   onClearSelection?: () => void;
   onMoveSelectedBy?: (delta: Point) => void;
   onMoveVertex?: (vertex: VertexHit, point: Point) => void;
+  onMoveSelectedEdgeBy?: (edgeHit: EdgeHit, delta: Point) => void;
   onRotateSelectedBy?: (deltaDeg: number) => void;
 };
 
 type DragState =
   | { mode: "pan"; x: number; y: number }
-  | { mode: "item"; worldPoint: Point }
+  | { mode: "item"; itemId: string; worldPoint: Point }
   | { mode: "vertex"; vertexHit: VertexHit }
+  | { mode: "edge"; edgeHit: EdgeHit; worldPoint: Point }
   | {
       mode: "rotate";
       centerScreenPoint: { x: number; y: number };
@@ -60,14 +66,244 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function snapToGrid(point: Point, spacingMm: number): Point {
+type Segment = {
+  start: Point;
+  end: Point;
+};
+
+type SnapTargets = {
+  vertices: Point[];
+  segments: Segment[];
+};
+
+function squaredDistance(a: Point, b: Point) {
+  const dx = a.xMm - b.xMm;
+  const dy = a.yMm - b.yMm;
+  return dx * dx + dy * dy;
+}
+
+function nearestPointOnSegment(point: Point, segment: Segment): Point {
+  const segmentDx = segment.end.xMm - segment.start.xMm;
+  const segmentDy = segment.end.yMm - segment.start.yMm;
+  const segmentLengthSquared = segmentDx * segmentDx + segmentDy * segmentDy;
+
+  if (segmentLengthSquared === 0) {
+    return segment.start;
+  }
+
+  const t =
+    ((point.xMm - segment.start.xMm) * segmentDx +
+      (point.yMm - segment.start.yMm) * segmentDy) /
+    segmentLengthSquared;
+  const clampedT = Math.max(0, Math.min(1, t));
+
+  return {
+    xMm: segment.start.xMm + clampedT * segmentDx,
+    yMm: segment.start.yMm + clampedT * segmentDy,
+  };
+}
+
+function buildSnapTargets(
+  items: PrimitiveItem[],
+  layers: Layer[],
+  excludedItemIdSet: Set<string>,
+): SnapTargets {
+  const visibleLayerIdSet = new Set(
+    layers.filter((layer) => layer.visible).map((layer) => layer.id),
+  );
+  const vertices: Point[] = [];
+  const segments: Segment[] = [];
+
+  items.forEach((item) => {
+    if (!visibleLayerIdSet.has(item.layerId) || excludedItemIdSet.has(item.id)) {
+      return;
+    }
+
+    vertices.push(...item.points);
+
+    const edgeCount =
+      item.kind === "polyline"
+        ? Math.max(0, item.points.length - 1)
+        : item.points.length;
+
+    for (let index = 0; index < edgeCount; index += 1) {
+      const start = item.points[index];
+      const end =
+        item.kind === "polyline"
+          ? item.points[index + 1]
+          : item.points[(index + 1) % item.points.length];
+
+      if (!start || !end) {
+        continue;
+      }
+
+      segments.push({ start, end });
+    }
+  });
+
+  return { vertices, segments };
+}
+
+function snapPointToExistingGeometry(
+  point: Point,
+  targets: SnapTargets,
+  toleranceMm: number,
+): Point | null {
+  const toleranceSquared = toleranceMm * toleranceMm;
+  let bestDistanceSquared = Number.POSITIVE_INFINITY;
+  let bestPoint: Point | null = null;
+
+  targets.vertices.forEach((vertex) => {
+    const distanceSquared = squaredDistance(point, vertex);
+
+    if (distanceSquared <= toleranceSquared && distanceSquared < bestDistanceSquared) {
+      bestDistanceSquared = distanceSquared;
+      bestPoint = vertex;
+    }
+  });
+
+  targets.segments.forEach((segment) => {
+    const projection = nearestPointOnSegment(point, segment);
+    const distanceSquared = squaredDistance(point, projection);
+
+    if (distanceSquared <= toleranceSquared && distanceSquared < bestDistanceSquared) {
+      bestDistanceSquared = distanceSquared;
+      bestPoint = projection;
+    }
+  });
+
+  return bestPoint;
+}
+
+function snapPointToGridLines(
+  point: Point,
+  spacingMm: number,
+  toleranceMm: number,
+): Point | null {
   if (spacingMm <= 0) {
-    return point;
+    return null;
+  }
+
+  let snappedX = point.xMm;
+  let snappedY = point.yMm;
+  let snapped = false;
+
+  const nearestGridX = Math.round(point.xMm / spacingMm) * spacingMm;
+  if (Math.abs(nearestGridX - point.xMm) <= toleranceMm) {
+    snappedX = nearestGridX;
+    snapped = true;
+  }
+
+  const nearestGridY = Math.round(point.yMm / spacingMm) * spacingMm;
+  if (Math.abs(nearestGridY - point.yMm) <= toleranceMm) {
+    snappedY = nearestGridY;
+    snapped = true;
+  }
+
+  if (!snapped) {
+    return null;
   }
 
   return {
-    xMm: Math.round(point.xMm / spacingMm) * spacingMm,
-    yMm: Math.round(point.yMm / spacingMm) * spacingMm,
+    xMm: snappedX,
+    yMm: snappedY,
+  };
+}
+
+function snapVertexPointWithPriority(point: Point, targets: SnapTargets): Point {
+  const snappedToExisting = snapPointToExistingGeometry(
+    point,
+    targets,
+    SHAPE_SNAP_TOLERANCE_MM,
+  );
+
+  if (snappedToExisting) {
+    return snappedToExisting;
+  }
+
+  return (
+    snapPointToGridLines(point, SNAP_SPACING_MM, GRID_SNAP_TOLERANCE_MM) ?? point
+  );
+}
+
+function snapItemDeltaWithPriority(
+  item: PrimitiveItem,
+  rawDelta: Point,
+  targets: SnapTargets,
+): Point {
+  const movedPoints = item.points.map((point) => ({
+    xMm: point.xMm + rawDelta.xMm,
+    yMm: point.yMm + rawDelta.yMm,
+  }));
+
+  let bestCorrection: Point | null = null;
+  let bestDistanceSquared = Number.POSITIVE_INFINITY;
+
+  movedPoints.forEach((movedPoint) => {
+    const snappedPoint = snapPointToExistingGeometry(
+      movedPoint,
+      targets,
+      SHAPE_SNAP_TOLERANCE_MM,
+    );
+
+    if (!snappedPoint) {
+      return;
+    }
+
+    const correction = {
+      xMm: snappedPoint.xMm - movedPoint.xMm,
+      yMm: snappedPoint.yMm - movedPoint.yMm,
+    };
+    const correctionDistanceSquared =
+      correction.xMm * correction.xMm + correction.yMm * correction.yMm;
+
+    if (correctionDistanceSquared < bestDistanceSquared) {
+      bestDistanceSquared = correctionDistanceSquared;
+      bestCorrection = correction;
+    }
+  });
+
+  if (bestCorrection) {
+    return {
+      xMm: rawDelta.xMm + bestCorrection.xMm,
+      yMm: rawDelta.yMm + bestCorrection.yMm,
+    };
+  }
+
+  let bestGridCorrectionX: number | null = null;
+  let bestGridCorrectionY: number | null = null;
+
+  movedPoints.forEach((movedPoint) => {
+    const nearestGridX = Math.round(movedPoint.xMm / SNAP_SPACING_MM) * SNAP_SPACING_MM;
+    const correctionX = nearestGridX - movedPoint.xMm;
+
+    if (
+      Math.abs(correctionX) <= GRID_SNAP_TOLERANCE_MM &&
+      (bestGridCorrectionX === null ||
+        Math.abs(correctionX) < Math.abs(bestGridCorrectionX))
+    ) {
+      bestGridCorrectionX = correctionX;
+    }
+
+    const nearestGridY = Math.round(movedPoint.yMm / SNAP_SPACING_MM) * SNAP_SPACING_MM;
+    const correctionY = nearestGridY - movedPoint.yMm;
+
+    if (
+      Math.abs(correctionY) <= GRID_SNAP_TOLERANCE_MM &&
+      (bestGridCorrectionY === null ||
+        Math.abs(correctionY) < Math.abs(bestGridCorrectionY))
+    ) {
+      bestGridCorrectionY = correctionY;
+    }
+  });
+
+  if (bestGridCorrectionX === null && bestGridCorrectionY === null) {
+    return rawDelta;
+  }
+
+  return {
+    xMm: rawDelta.xMm + (bestGridCorrectionX ?? 0),
+    yMm: rawDelta.yMm + (bestGridCorrectionY ?? 0),
   };
 }
 
@@ -82,6 +318,7 @@ export function CanvasEditor({
   onClearSelection,
   onMoveSelectedBy,
   onMoveVertex,
+  onMoveSelectedEdgeBy,
   onRotateSelectedBy,
 }: CanvasEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -93,6 +330,7 @@ export function CanvasEditor({
     currentScreenPoint: { x: number; y: number };
   } | null>(null);
   const [hoveredVertex, setHoveredVertex] = useState<VertexHit | null>(null);
+  const [hoveredEdge, setHoveredEdge] = useState<EdgeHit | null>(null);
   const [isRotationHandleHovered, setIsRotationHandleHovered] = useState(false);
   const zoom = controlledZoom ?? internalZoom;
   const effectiveScale = zoom * WORLD_SCALE_AT_1X;
@@ -392,12 +630,19 @@ export function CanvasEditor({
             return;
           }
 
+          const edgeHit = hitTestEdge(items, layers, worldPoint, selectedItemIds);
+
+          if (edgeHit) {
+            dragStateRef.current = { mode: "edge", edgeHit, worldPoint };
+            return;
+          }
+
           const hitItemId = hitTestPrimitive(items, layers, worldPoint);
 
           if (hitItemId) {
             onSelectItem?.(hitItemId);
             setBoxSelection(null);
-            dragStateRef.current = { mode: "item", worldPoint };
+            dragStateRef.current = { mode: "item", itemId: hitItemId, worldPoint };
             return;
           }
 
@@ -449,9 +694,60 @@ export function CanvasEditor({
           if (dragState.mode === "vertex") {
             const worldPoint = toWorldPoint(event);
             const nextPoint = event.shiftKey
-              ? snapToGrid(worldPoint, SNAP_SPACING_MM)
+              ? snapVertexPointWithPriority(
+                  worldPoint,
+                  buildSnapTargets(
+                    items,
+                    layers,
+                    new Set([dragState.vertexHit.itemId]),
+                  ),
+                )
               : worldPoint;
             onMoveVertex?.(dragState.vertexHit, nextPoint);
+            return;
+          }
+
+          if (dragState.mode === "edge") {
+            const worldPoint = toWorldPoint(event);
+            const dx = worldPoint.xMm - dragState.worldPoint.xMm;
+            const dy = worldPoint.yMm - dragState.worldPoint.yMm;
+            const selected = items.find((item) => item.id === dragState.edgeHit.itemId);
+
+            if (!selected) {
+              return;
+            }
+
+            const startPoint = selected.points[dragState.edgeHit.startPointIndex];
+            const endPoint = selected.points[dragState.edgeHit.endPointIndex];
+
+            if (!startPoint || !endPoint) {
+              return;
+            }
+
+            const edgeDx = endPoint.xMm - startPoint.xMm;
+            const edgeDy = endPoint.yMm - startPoint.yMm;
+            const edgeLength = Math.hypot(edgeDx, edgeDy);
+
+            if (edgeLength === 0) {
+              return;
+            }
+
+            const normal = {
+              xMm: -edgeDy / edgeLength,
+              yMm: edgeDx / edgeLength,
+            };
+            const projectedOffset = dx * normal.xMm + dy * normal.yMm;
+            const delta = {
+              xMm: normal.xMm * projectedOffset,
+              yMm: normal.yMm * projectedOffset,
+            };
+
+            onMoveSelectedEdgeBy?.(dragState.edgeHit, delta);
+            dragStateRef.current = {
+              mode: "edge",
+              edgeHit: dragState.edgeHit,
+              worldPoint,
+            };
             return;
           }
 
@@ -469,16 +765,33 @@ export function CanvasEditor({
           }
 
           const worldPoint = toWorldPoint(event);
-          const nextWorldPoint = event.shiftKey
-            ? snapToGrid(worldPoint, SNAP_SPACING_MM)
-            : worldPoint;
-          const delta = {
+          const rawDelta = {
+            xMm: worldPoint.xMm - dragState.worldPoint.xMm,
+            yMm: worldPoint.yMm - dragState.worldPoint.yMm,
+          };
+          const draggedItem = items.find((item) => item.id === dragState.itemId);
+          const delta = event.shiftKey && draggedItem
+            ? snapItemDeltaWithPriority(
+                draggedItem,
+                rawDelta,
+                buildSnapTargets(items, layers, new Set([dragState.itemId])),
+              )
+            : rawDelta;
+          const nextWorldPoint = {
+            xMm: dragState.worldPoint.xMm + delta.xMm,
+            yMm: dragState.worldPoint.yMm + delta.yMm,
+          };
+          const appliedDelta = {
             xMm: nextWorldPoint.xMm - dragState.worldPoint.xMm,
             yMm: nextWorldPoint.yMm - dragState.worldPoint.yMm,
           };
 
-          onMoveSelectedBy?.(delta);
-          dragStateRef.current = { mode: "item", worldPoint: nextWorldPoint };
+          onMoveSelectedBy?.(appliedDelta);
+          dragStateRef.current = {
+            mode: "item",
+            itemId: dragState.itemId,
+            worldPoint: nextWorldPoint,
+          };
         }}
         onMouseUp={(event) => {
           const dragState = dragStateRef.current;
@@ -512,6 +825,7 @@ export function CanvasEditor({
           dragStateRef.current = null;
           setBoxSelection(null);
           setHoveredVertex(null);
+          setHoveredEdge(null);
           setIsRotationHandleHovered(false);
         }}
         onMouseMoveCapture={(event) => {
@@ -534,6 +848,10 @@ export function CanvasEditor({
           const worldPoint = toWorldPoint(event);
           const vertexHit = hitTestVertex(items, layers, worldPoint, selectedItemIds);
           setHoveredVertex(vertexHit);
+          const edgeHit = vertexHit
+            ? null
+            : hitTestEdge(items, layers, worldPoint, selectedItemIds);
+          setHoveredEdge(edgeHit);
         }}
         onWheel={(event) => {
           event.preventDefault();

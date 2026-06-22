@@ -275,7 +275,7 @@ describe("CanvasEditor", () => {
     fireEvent.mouseUp(canvas, { clientX: 260, clientY: 260 });
 
     expect(onSelectItem).toHaveBeenCalledWith("item-1");
-    expect(onMoveSelectedBy).toHaveBeenCalledWith({ xMm: 300, yMm: 300 });
+    expect(onMoveSelectedBy).toHaveBeenCalledWith({ xMm: 320, yMm: 320 });
   });
 
   it("snaps vertex drag to 0.5m grid while shift pressed", () => {
@@ -318,7 +318,107 @@ describe("CanvasEditor", () => {
 
     expect(onMoveVertex).toHaveBeenCalledWith(
       { itemId: "item-1", pointIndex: 0 },
-      { xMm: 0, yMm: 0 },
+      { xMm: 120, yMm: 116 },
     );
+  });
+
+  it("prefers snapping to existing geometry over divider grid lines while shift pressed", () => {
+    const onMoveVertex = vi.fn();
+
+    render(
+      <CanvasEditor
+        layers={[
+          {
+            id: "layer-floorplan",
+            name: "Floor Plan",
+            category: "floorplan",
+            zIndex: 0,
+            visible: true,
+            locked: false,
+            opacity: 1,
+          },
+        ]}
+        items={[
+          {
+            id: "item-1",
+            kind: "polygon",
+            layerId: "layer-floorplan",
+            points: [
+              { xMm: 100, yMm: 100 },
+              { xMm: 240, yMm: 100 },
+              { xMm: 220, yMm: 200 },
+            ],
+          },
+          {
+            id: "item-2",
+            kind: "rect",
+            layerId: "layer-floorplan",
+            points: [
+              { xMm: 492, yMm: 500 },
+              { xMm: 560, yMm: 500 },
+              { xMm: 560, yMm: 560 },
+              { xMm: 492, yMm: 560 },
+            ],
+          },
+        ]}
+        selectedItemIds={["item-1"]}
+        onMoveVertex={onMoveVertex}
+      />,
+    );
+
+    const canvas = screen.getByTestId("editor-canvas-surface");
+    fireEvent.mouseDown(canvas, { clientX: 50, clientY: 50, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 249, clientY: 250, shiftKey: true });
+    fireEvent.mouseUp(canvas, { clientX: 249, clientY: 250 });
+
+    expect(onMoveVertex).toHaveBeenCalledWith(
+      { itemId: "item-1", pointIndex: 0 },
+      { xMm: 498, yMm: 500 },
+    );
+  });
+
+  it("drags hovered edge by moving both edge vertices along perpendicular direction", () => {
+    const onMoveSelectedEdgeBy = vi.fn();
+
+    render(
+      <CanvasEditor
+        layers={[
+          {
+            id: "layer-floorplan",
+            name: "Floor Plan",
+            category: "floorplan",
+            zIndex: 0,
+            visible: true,
+            locked: false,
+            opacity: 1,
+          },
+        ]}
+        items={[
+          {
+            id: "item-1",
+            kind: "rect",
+            layerId: "layer-floorplan",
+            points: [
+              { xMm: 100, yMm: 100 },
+              { xMm: 300, yMm: 100 },
+              { xMm: 300, yMm: 260 },
+              { xMm: 100, yMm: 260 },
+            ],
+          },
+        ]}
+        selectedItemIds={["item-1"]}
+        onMoveSelectedEdgeBy={onMoveSelectedEdgeBy}
+      />,
+    );
+
+    const canvas = screen.getByTestId("editor-canvas-surface");
+    fireEvent.mouseDown(canvas, { clientX: 120, clientY: 50, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 120, clientY: 70 });
+    fireEvent.mouseUp(canvas, { clientX: 120, clientY: 70 });
+
+    expect(onMoveSelectedEdgeBy).toHaveBeenCalled();
+    const [, delta] = onMoveSelectedEdgeBy.mock.calls[0];
+    expect(Math.abs(delta.xMm)).toBeLessThan(1e-6);
+    expect(Math.round(delta.yMm)).toBe(40);
   });
 });

@@ -19,6 +19,18 @@ export type VertexHit = {
   pointIndex: number;
 };
 
+export type EdgeHit = {
+  itemId: string;
+  startPointIndex: number;
+  endPointIndex: number;
+};
+
+export type PrimitiveEdge = {
+  itemId: string;
+  start: Point;
+  end: Point;
+};
+
 const POLYLINE_HIT_TOLERANCE_MM = 8;
 const SHAPE_EDGE_HIT_TOLERANCE_MM = 4;
 const VERTEX_HIT_TOLERANCE_MM = 10;
@@ -234,6 +246,60 @@ export function hitTestVertex(
   return null;
 }
 
+export function hitTestEdge(
+  items: PrimitiveItem[],
+  layers: Layer[],
+  worldPoint: Point,
+  selectedItemIds: string[],
+): EdgeHit | null {
+  const selectedItemIdSet = new Set(selectedItemIds);
+  const sortedItems = sortItemsByLayerZIndex(items, layers);
+
+  for (let i = sortedItems.length - 1; i >= 0; i -= 1) {
+    const item = sortedItems[i];
+
+    if (!isLayerVisible(item.layerId, layers) || !selectedItemIdSet.has(item.id)) {
+      continue;
+    }
+
+    const edgeCount =
+      item.kind === "polyline"
+        ? Math.max(0, item.points.length - 1)
+        : item.points.length;
+
+    for (let edgeIndex = edgeCount - 1; edgeIndex >= 0; edgeIndex -= 1) {
+      const startPointIndex = edgeIndex;
+      const endPointIndex =
+        item.kind === "polyline"
+          ? edgeIndex + 1
+          : (edgeIndex + 1) % item.points.length;
+      const startPoint = item.points[startPointIndex];
+      const endPoint = item.points[endPointIndex];
+
+      if (!startPoint || !endPoint) {
+        continue;
+      }
+
+      if (
+        isPointNearSegment(
+          worldPoint,
+          startPoint,
+          endPoint,
+          SHAPE_EDGE_HIT_TOLERANCE_MM,
+        )
+      ) {
+        return {
+          itemId: item.id,
+          startPointIndex,
+          endPointIndex,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
 function getItemBounds(points: Point[]) {
   const [firstPoint, ...restPoints] = points;
 
@@ -339,4 +405,46 @@ export function movePrimitive(item: PrimitiveItem, delta: Point): PrimitiveItem 
       yMm: point.yMm + delta.yMm,
     })),
   };
+}
+
+export function collectVisiblePrimitiveEdges(
+  items: PrimitiveItem[],
+  layers: Layer[],
+  excludedItemIdSet: Set<string> = new Set(),
+): PrimitiveEdge[] {
+  const visibleLayerIdSet = new Set(
+    layers.filter((layer) => layer.visible).map((layer) => layer.id),
+  );
+  const edges: PrimitiveEdge[] = [];
+
+  items.forEach((item) => {
+    if (!visibleLayerIdSet.has(item.layerId) || excludedItemIdSet.has(item.id)) {
+      return;
+    }
+
+    const edgeCount =
+      item.kind === "polyline"
+        ? Math.max(0, item.points.length - 1)
+        : item.points.length;
+
+    for (let index = 0; index < edgeCount; index += 1) {
+      const start = item.points[index];
+      const end =
+        item.kind === "polyline"
+          ? item.points[index + 1]
+          : item.points[(index + 1) % item.points.length];
+
+      if (!start || !end) {
+        continue;
+      }
+
+      edges.push({
+        itemId: item.id,
+        start,
+        end,
+      });
+    }
+  });
+
+  return edges;
 }
