@@ -124,6 +124,56 @@ describe('createEditorStore', () => {
     expect(store.getState().items[0].points[1]).toEqual({ xMm: 300, yMm: 150 });
   });
 
+  it('updateSelectedPrimitivePoint keeps rect axis-aligned rectangle shape', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect');
+    store.getState().updateSelectedPrimitivePoint(0, { xMm: 100, yMm: 120 });
+
+    expect(store.getState().items[0].points).toEqual([
+      { xMm: 100, yMm: 120 },
+      { xMm: 320, yMm: 120 },
+      { xMm: 320, yMm: 260 },
+      { xMm: 100, yMm: 260 },
+    ]);
+  });
+
+  it('copySelectedItem duplicates selected primitive with offset and new id', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect');
+    store.getState().copySelectedItem();
+
+    expect(store.getState().items).toHaveLength(2);
+    expect(store.getState().items[1].id).toBe('item-2');
+    expect(store.getState().selectedItemIds).toEqual(['item-2']);
+    expect(store.getState().items[1].points[0]).toEqual({ xMm: 160, yMm: 160 });
+  });
+
+  it('rotateSelectedPrimitiveBy rotates selected primitive around center', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('polyline');
+    const before = store.getState().items[0].points[0];
+
+    store.getState().rotateSelectedPrimitiveBy(90);
+
+    const after = store.getState().items[0].points[0];
+    expect(after.xMm).not.toBe(before.xMm);
+    expect(after.yMm).not.toBe(before.yMm);
+  });
+
+  it('rotateSelectedPrimitiveTo rotates selected primitive to target angle', () => {
+    const store = createEditorStore();
+
+    store.getState().addPrimitive('rect');
+    store.getState().rotateSelectedPrimitiveTo(45);
+
+    const points = store.getState().items[0].points;
+    expect(points[0].xMm).not.toBe(140);
+    expect(points[0].yMm).not.toBe(140);
+  });
+
   it('deleteSelectedItem removes selected primitive', () => {
     const store = createEditorStore();
 

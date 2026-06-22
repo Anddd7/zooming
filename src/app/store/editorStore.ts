@@ -25,6 +25,9 @@ type EditorActions = {
   appendSelectedPrimitivePoint: () => void;
   removeSelectedPrimitivePoint: () => void;
   updateSelectedPrimitiveLayer: (layerId: string) => void;
+  rotateSelectedPrimitiveBy: (deltaDeg: number) => void;
+  rotateSelectedPrimitiveTo: (angleDeg: number) => void;
+  copySelectedItem: () => void;
   deleteSelectedItem: () => void;
   moveSelectedItemBy: (delta: Point) => void;
   clearSelection: () => void;
@@ -76,6 +79,109 @@ function defaultPointsByKind(kind: PrimitiveKind): Point[] {
     { xMm: 320, yMm: 260 },
     { xMm: 140, yMm: 260 },
   ];
+}
+
+function pointAverage(points: Point[]): Point {
+  if (points.length === 0) {
+    return { xMm: 0, yMm: 0 };
+  }
+
+  const sum = points.reduce(
+    (current, point) => ({
+      xMm: current.xMm + point.xMm,
+      yMm: current.yMm + point.yMm,
+    }),
+    { xMm: 0, yMm: 0 },
+  );
+
+  return {
+    xMm: sum.xMm / points.length,
+    yMm: sum.yMm / points.length,
+  };
+}
+
+function rotatePoint(point: Point, center: Point, deltaDeg: number): Point {
+  const radians = (deltaDeg * Math.PI) / 180;
+  const translatedX = point.xMm - center.xMm;
+  const translatedY = point.yMm - center.yMm;
+
+  return {
+    xMm:
+      center.xMm + translatedX * Math.cos(radians) - translatedY * Math.sin(radians),
+    yMm:
+      center.yMm + translatedX * Math.sin(radians) + translatedY * Math.cos(radians),
+  };
+}
+
+function primitiveRotationDeg(points: Point[]): number {
+  if (points.length < 2) {
+    return 0;
+  }
+
+  const first = points[0];
+  const second = points[1];
+  return (Math.atan2(second.yMm - first.yMm, second.xMm - first.xMm) * 180) / Math.PI;
+}
+
+function normalizeVector(dx: number, dy: number) {
+  const length = Math.hypot(dx, dy);
+
+  if (length === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  return {
+    x: dx / length,
+    y: dy / length,
+  };
+}
+
+function updateRectCorner(points: Point[], pointIndex: number, point: Point): Point[] {
+  if (points.length !== 4) {
+    return points;
+  }
+
+  if (pointIndex === 0) {
+    const opposite = points[2];
+    return [
+      point,
+      { xMm: opposite.xMm, yMm: point.yMm },
+      opposite,
+      { xMm: point.xMm, yMm: opposite.yMm },
+    ];
+  }
+
+  if (pointIndex === 1) {
+    const opposite = points[3];
+    return [
+      { xMm: opposite.xMm, yMm: point.yMm },
+      point,
+      { xMm: point.xMm, yMm: opposite.yMm },
+      opposite,
+    ];
+  }
+
+  if (pointIndex === 2) {
+    const opposite = points[0];
+    return [
+      opposite,
+      { xMm: point.xMm, yMm: opposite.yMm },
+      point,
+      { xMm: opposite.xMm, yMm: point.yMm },
+    ];
+  }
+
+  if (pointIndex === 3) {
+    const opposite = points[1];
+    return [
+      { xMm: point.xMm, yMm: opposite.yMm },
+      opposite,
+      { xMm: opposite.xMm, yMm: point.yMm },
+      point,
+    ];
+  }
+
+  return points;
 }
 
 export function createEditorStore(initial: EditorStoreInitialState = {}) {
@@ -184,16 +290,45 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
             }
 
             const origin = item.points[0];
+            const point1 = item.points[1];
+            const point3 = item.points[3];
+            const widthDirection = normalizeVector(
+              point1.xMm - origin.xMm,
+              point1.yMm - origin.yMm,
+            );
+            const heightDirection = normalizeVector(
+              point3.xMm - origin.xMm,
+              point3.yMm - origin.yMm,
+            );
+            const safeWidthDirection =
+              widthDirection.x === 0 && widthDirection.y === 0
+                ? { x: 1, y: 0 }
+                : widthDirection;
+            const safeHeightDirection =
+              heightDirection.x === 0 && heightDirection.y === 0
+                ? { x: 0, y: 1 }
+                : heightDirection;
             const safeWidth = Math.max(1, widthMm);
             const safeHeight = Math.max(1, heightMm);
+            const nextPoint1 = {
+              xMm: origin.xMm + safeWidthDirection.x * safeWidth,
+              yMm: origin.yMm + safeWidthDirection.y * safeWidth,
+            };
+            const nextPoint3 = {
+              xMm: origin.xMm + safeHeightDirection.x * safeHeight,
+              yMm: origin.yMm + safeHeightDirection.y * safeHeight,
+            };
 
             return {
               ...item,
               points: [
                 { xMm: origin.xMm, yMm: origin.yMm },
-                { xMm: origin.xMm + safeWidth, yMm: origin.yMm },
-                { xMm: origin.xMm + safeWidth, yMm: origin.yMm + safeHeight },
-                { xMm: origin.xMm, yMm: origin.yMm + safeHeight },
+                nextPoint1,
+                {
+                  xMm: nextPoint1.xMm + safeHeightDirection.x * safeHeight,
+                  yMm: nextPoint1.yMm + safeHeightDirection.y * safeHeight,
+                },
+                nextPoint3,
               ],
             };
           }),
@@ -214,6 +349,13 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
               return item;
             }
 
+            if (item.kind === 'rect') {
+              return {
+                ...item,
+                points: updateRectCorner(item.points, pointIndex, point),
+              };
+            }
+
             return {
               ...item,
               points: item.points.map((existingPoint, existingPointIndex) => {
@@ -223,6 +365,55 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
 
                 return point;
               }),
+            };
+          }),
+        };
+      });
+    },
+    rotateSelectedPrimitiveBy: (deltaDeg) => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId) {
+              return item;
+            }
+
+            const center = pointAverage(item.points);
+            return {
+              ...item,
+              points: item.points.map((point) => rotatePoint(point, center, deltaDeg)),
+            };
+          }),
+        };
+      });
+    },
+    rotateSelectedPrimitiveTo: (angleDeg) => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        return {
+          items: state.items.map((item) => {
+            if (item.id !== selectedItemId || item.points.length < 2) {
+              return item;
+            }
+
+            const center = pointAverage(item.points);
+            const currentAngle = primitiveRotationDeg(item.points);
+            const deltaDeg = angleDeg - currentAngle;
+
+            return {
+              ...item,
+              points: item.points.map((point) => rotatePoint(point, center, deltaDeg)),
             };
           }),
         };
@@ -303,6 +494,35 @@ export function createEditorStore(initial: EditorStoreInitialState = {}) {
               layerId,
             };
           }),
+        };
+      });
+    },
+    copySelectedItem: () => {
+      set((state) => {
+        const [selectedItemId] = state.selectedItemIds;
+
+        if (!selectedItemId) {
+          return {};
+        }
+
+        const selectedItem = state.items.find((item) => item.id === selectedItemId);
+
+        if (!selectedItem) {
+          return {};
+        }
+
+        const copiedItem: PrimitiveItem = {
+          ...selectedItem,
+          id: `item-${state.items.length + 1}`,
+          points: selectedItem.points.map((point) => ({
+            xMm: point.xMm + 20,
+            yMm: point.yMm + 20,
+          })),
+        };
+
+        return {
+          items: [...state.items, copiedItem],
+          selectedItemIds: [copiedItem.id],
         };
       });
     },

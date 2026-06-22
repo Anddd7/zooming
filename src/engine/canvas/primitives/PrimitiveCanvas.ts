@@ -10,10 +10,18 @@ type ScreenPoint = {
 type DrawOptions = {
   worldToScreen: (point: Point) => ScreenPoint;
   selectedItemIds: string[];
+  hoveredVertex: VertexHit | null;
+};
+
+export type VertexHit = {
+  itemId: string;
+  pointIndex: number;
 };
 
 const POLYLINE_HIT_TOLERANCE_MM = 8;
 const SHAPE_EDGE_HIT_TOLERANCE_MM = 4;
+const VERTEX_HIT_TOLERANCE_MM = 10;
+const VERTEX_RADIUS_PX = 4;
 
 function isLayerVisible(layerId: string, layers: Layer[]) {
   const layer = layers.find((candidate) => candidate.id === layerId);
@@ -135,7 +143,61 @@ export function drawPrimitives(
       ctx.fillStyle = "rgba(71, 85, 105, 0.1)";
       ctx.fill();
     }
+
+    if (isSelected) {
+      item.points.forEach((point, pointIndex) => {
+        const screenPoint = options.worldToScreen(point);
+        const isHoveredVertex =
+          options.hoveredVertex?.itemId === item.id &&
+          options.hoveredVertex.pointIndex === pointIndex;
+
+        ctx.beginPath();
+        ctx.arc(
+          screenPoint.x,
+          screenPoint.y,
+          isHoveredVertex ? VERTEX_RADIUS_PX + 1 : VERTEX_RADIUS_PX,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fillStyle = isHoveredVertex ? "#2563eb" : "#ffffff";
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1;
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
   });
+}
+
+export function hitTestVertex(
+  items: PrimitiveItem[],
+  layers: Layer[],
+  worldPoint: Point,
+  selectedItemIds: string[],
+): VertexHit | null {
+  const selectedItemIdSet = new Set(selectedItemIds);
+  const sortedItems = sortItemsByLayerZIndex(items, layers);
+
+  for (let i = sortedItems.length - 1; i >= 0; i -= 1) {
+    const item = sortedItems[i];
+
+    if (!isLayerVisible(item.layerId, layers) || !selectedItemIdSet.has(item.id)) {
+      continue;
+    }
+
+    for (let pointIndex = item.points.length - 1; pointIndex >= 0; pointIndex -= 1) {
+      const point = item.points[pointIndex];
+
+      if (squaredDistance(worldPoint, point) <= VERTEX_HIT_TOLERANCE_MM * VERTEX_HIT_TOLERANCE_MM) {
+        return {
+          itemId: item.id,
+          pointIndex,
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 function getItemBounds(points: Point[]) {

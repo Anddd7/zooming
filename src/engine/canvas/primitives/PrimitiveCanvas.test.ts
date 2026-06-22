@@ -4,6 +4,7 @@ import type { PrimitiveItem } from "../../../domains/drawing/PrimitiveItem";
 import type { Layer } from "../../../domains/layer/Layer";
 import {
   drawPrimitives,
+  hitTestVertex,
   hitTestPrimitive,
   hitTestPrimitivesInWorldRect,
   movePrimitive,
@@ -68,9 +69,31 @@ describe("drawPrimitives", () => {
     drawPrimitives(ctx, items, [visibleLayer, hiddenLayer], {
       worldToScreen: (point) => ({ x: point.xMm, y: point.yMm }),
       selectedItemIds: [],
+      hoveredVertex: null,
     });
 
     expect(ctx.stroke).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("hitTestVertex", () => {
+  it("returns selected vertex hit result when cursor is near a vertex", () => {
+    const items: PrimitiveItem[] = [
+      {
+        id: "poly-vertex",
+        kind: "polygon",
+        layerId: visibleLayer.id,
+        points: [
+          { xMm: 100, yMm: 100 },
+          { xMm: 240, yMm: 100 },
+          { xMm: 220, yMm: 200 },
+        ],
+      },
+    ];
+
+    const vertexHit = hitTestVertex(items, [visibleLayer], { xMm: 102, yMm: 101 }, ["poly-vertex"]);
+
+    expect(vertexHit).toEqual({ itemId: "poly-vertex", pointIndex: 0 });
   });
 });
 

@@ -1,20 +1,86 @@
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
-  BeakerIcon,
+  DocumentDuplicateIcon,
   EyeIcon,
   EyeSlashIcon,
   MinusCircleIcon,
   PlusCircleIcon,
-  RectangleGroupIcon,
-  SlashIcon,
   TrashIcon,
 } from "@heroicons/react/24/solid";
 
 import { createEditorStore } from "../store/editorStore";
 import { CanvasEditor } from "../../engine/canvas/CanvasEditor";
+import { polygonAreaMm2 } from "../../domains/geometry/GeometryMeasure";
+
+const EDITOR_STORAGE_KEY = "zooming.editor.snapshot.v1";
+
+type PersistedEditorSnapshot = {
+  selectedLayerId: string | null;
+  selectedItemIds: string[];
+  layers: ReturnType<typeof createEditorStore>["getState"]["layers"];
+  items: ReturnType<typeof createEditorStore>["getState"]["items"];
+  zoomLevel: number;
+};
+
+function loadPersistedEditorSnapshot(): PersistedEditorSnapshot | null {
+  try {
+    const raw = window.localStorage.getItem(EDITOR_STORAGE_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<PersistedEditorSnapshot>;
+
+    if (!Array.isArray(parsed.layers) || !Array.isArray(parsed.items)) {
+      return null;
+    }
+
+    return {
+      selectedLayerId: parsed.selectedLayerId ?? null,
+      selectedItemIds: Array.isArray(parsed.selectedItemIds)
+        ? parsed.selectedItemIds
+        : [],
+      layers: parsed.layers,
+      items: parsed.items,
+      zoomLevel:
+        typeof parsed.zoomLevel === "number" && !Number.isNaN(parsed.zoomLevel)
+          ? parsed.zoomLevel
+          : 1,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function itemRotationDeg(points: { xMm: number; yMm: number }[]) {
+  if (points.length < 2) {
+    return 0;
+  }
+
+  const first = points[0];
+  const second = points[1];
+  return (Math.atan2(second.yMm - first.yMm, second.xMm - first.xMm) * 180) / Math.PI;
+}
+
+function segmentLength(a: { xMm: number; yMm: number }, b: { xMm: number; yMm: number }) {
+  return Math.hypot(b.xMm - a.xMm, b.yMm - a.yMm);
+}
 
 export function EditorPage() {
-  const storeRef = useRef(createEditorStore());
+  const persistedSnapshot = useMemo(loadPersistedEditorSnapshot, []);
+  const storeRef = useRef(
+    createEditorStore(
+      persistedSnapshot
+        ? {
+            selectedLayerId: persistedSnapshot.selectedLayerId,
+            selectedItemIds: persistedSnapshot.selectedItemIds,
+            layers: persistedSnapshot.layers,
+            items: persistedSnapshot.items,
+          }
+        : undefined,
+    ),
+  );
   const store = storeRef.current;
   const state = useSyncExternalStore(
     store.subscribe,
@@ -25,15 +91,43 @@ export function EditorPage() {
     (item) => item.id === state.selectedItemIds[0],
   );
   const sortedLayers = [...state.layers].sort((a, b) => b.zIndex - a.zIndex);
-  const selectedLayer = state.layers.find(
-    (layer) => layer.id === state.selectedLayerId,
-  );
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomLevel, setZoomLevel] = useState(persistedSnapshot?.zoomLevel ?? 1);
+  const [isVertexEditorExpanded, setIsVertexEditorExpanded] = useState(false);
 
   const iconButtonClass =
     "grid h-8 w-8 place-items-center rounded border border-hairline bg-canvas/80 text-body transition-colors hover:bg-canvas";
 
   const quickZoomLevels = [1, 0.8, 0.5, 0.1];
+
+  useEffect(() => {
+    function persistSnapshot() {
+      try {
+        const currentState = store.getState();
+
+        const snapshot: PersistedEditorSnapshot = {
+          selectedLayerId: currentState.selectedLayerId,
+          selectedItemIds: currentState.selectedItemIds,
+          layers: currentState.layers,
+          items: currentState.items,
+          zoomLevel,
+        };
+
+        window.localStorage.setItem(EDITOR_STORAGE_KEY, JSON.stringify(snapshot));
+      } catch {
+        // ignore storage write failures
+      }
+    }
+
+    const unsubscribe = store.subscribe(() => {
+      persistSnapshot();
+    });
+
+    persistSnapshot();
+
+    return () => {
+      unsubscribe();
+    };
+  }, [store, zoomLevel]);
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden px-4 pt-3">
@@ -43,30 +137,70 @@ export function EditorPage() {
             type="button"
             className={iconButtonClass}
             aria-label="Add Line"
+            title="Add Line"
             onClick={() => state.addPrimitive("polyline")}
           >
-            <SlashIcon className="h-4 w-4" />
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+              <line
+                x1="5"
+                y1="18"
+                x2="19"
+                y2="6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
           </button>
           <button
             type="button"
             className={iconButtonClass}
             aria-label="Add Rect"
+            title="Add Rect"
             onClick={() => state.addPrimitive("rect")}
           >
-            <RectangleGroupIcon className="h-4 w-4" />
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+              <rect
+                x="5"
+                y="6"
+                width="14"
+                height="12"
+                stroke="currentColor"
+                strokeWidth="2"
+                fill="none"
+              />
+            </svg>
           </button>
           <button
             type="button"
             className={iconButtonClass}
             aria-label="Add Polygon"
+            title="Add Polygon"
             onClick={() => state.addPrimitive("polygon")}
           >
-            <BeakerIcon className="h-4 w-4" />
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+              <path
+                d="M5 16L9 6L18 8L19 17L8 19Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                fill="none"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={iconButtonClass}
+            aria-label="Copy Selected"
+            title="Copy Selected"
+            onClick={() => state.copySelectedItem()}
+          >
+            <DocumentDuplicateIcon className="h-4 w-4" />
           </button>
           <button
             type="button"
             className={iconButtonClass}
             aria-label="Delete Selected"
+            title="Delete Selected"
             onClick={() => state.deleteSelectedItem()}
           >
             <TrashIcon className="h-4 w-4" />
@@ -168,15 +302,22 @@ export function EditorPage() {
         </div>
         <div className="pointer-events-auto absolute right-2 top-[30rem] z-10 w-64 rounded-lg border border-hairline bg-canvas/80 p-2 text-xs shadow-sm backdrop-blur">
           <div className="font-semibold">Properties</div>
-          {selectedLayer ? (
-            <div className="mt-1 text-[11px] text-ink-muted-48">
-              editing layer: {selectedLayer.name}
-            </div>
-          ) : null}
           {selectedItem ? (
             <div className="mt-2 space-y-2">
               <div className="text-[11px] text-ink-muted-48">
                 {selectedItem.kind} · {selectedItem.id}
+              </div>
+              <div className="rounded border border-hairline bg-canvas/70 px-2 py-1 text-[11px] text-ink-muted-48">
+                <div className="font-medium text-body">Area (read-only)</div>
+                <div className="mt-0.5">
+                  {selectedItem.kind === "polyline"
+                    ? "N/A"
+                    : (() => {
+                        const areaMm2 = polygonAreaMm2(selectedItem.points);
+                        const areaM2 = areaMm2 / 1_000_000;
+                        return `${Math.round(areaMm2)} mm² / ${areaM2.toFixed(3)} m²`;
+                      })()}
+                </div>
               </div>
               <label className="block">
                 <span className="mb-0.5 block">Layer</span>
@@ -194,6 +335,38 @@ export function EditorPage() {
                   ))}
                 </select>
               </label>
+              <div className="rounded border border-hairline bg-canvas/70 px-2 py-1">
+                <div className="mb-1 text-[11px] font-medium">Rotation</div>
+                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-1">
+                  <input
+                    aria-label="Rotation angle"
+                    type="number"
+                    className="min-w-0 rounded border border-hairline bg-canvas px-2 py-1"
+                    value={Math.round(itemRotationDeg(selectedItem.points))}
+                    onChange={(event) => {
+                      const nextAngle = Number(event.target.value);
+
+                      if (!Number.isNaN(nextAngle)) {
+                        state.rotateSelectedPrimitiveTo(nextAngle);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="whitespace-nowrap rounded border border-hairline bg-canvas px-2 py-1"
+                    onClick={() => state.rotateSelectedPrimitiveBy(15)}
+                  >
+                    +15°
+                  </button>
+                  <button
+                    type="button"
+                    className="whitespace-nowrap rounded border border-hairline bg-canvas px-2 py-1"
+                    onClick={() => state.rotateSelectedPrimitiveBy(90)}
+                  >
+                    +90°
+                  </button>
+                </div>
+              </div>
               {selectedItem.kind === "rect" &&
               selectedItem.points.length === 4 ? (
                 <div className="grid grid-cols-2 gap-2">
@@ -202,14 +375,13 @@ export function EditorPage() {
                     <input
                       type="number"
                       className="w-full rounded border border-hairline bg-canvas/70 px-2 py-1"
-                      value={Math.round(
-                        selectedItem.points[1].xMm - selectedItem.points[0].xMm,
-                      )}
+                      value={Math.round(segmentLength(selectedItem.points[0], selectedItem.points[1]))}
                       onChange={(event) => {
                         const nextWidth = Number(event.target.value);
-                        const currentHeight =
-                          selectedItem.points[2].yMm -
-                          selectedItem.points[1].yMm;
+                        const currentHeight = segmentLength(
+                          selectedItem.points[1],
+                          selectedItem.points[2],
+                        );
 
                         if (!Number.isNaN(nextWidth)) {
                           state.updateSelectedPrimitiveDimensions({
@@ -225,14 +397,13 @@ export function EditorPage() {
                     <input
                       type="number"
                       className="w-full rounded border border-hairline bg-canvas/70 px-2 py-1"
-                      value={Math.round(
-                        selectedItem.points[2].yMm - selectedItem.points[1].yMm,
-                      )}
+                      value={Math.round(segmentLength(selectedItem.points[1], selectedItem.points[2]))}
                       onChange={(event) => {
                         const nextHeight = Number(event.target.value);
-                        const currentWidth =
-                          selectedItem.points[1].xMm -
-                          selectedItem.points[0].xMm;
+                        const currentWidth = segmentLength(
+                          selectedItem.points[0],
+                          selectedItem.points[1],
+                        );
 
                         if (!Number.isNaN(nextHeight)) {
                           state.updateSelectedPrimitiveDimensions({
@@ -245,44 +416,57 @@ export function EditorPage() {
                   </label>
                 </div>
               ) : null}
-              <div className="space-y-1">
-                {selectedItem.points.map((point, pointIndex) => (
-                  <div
-                    key={`${selectedItem.id}-point-${pointIndex}`}
-                    className="grid grid-cols-2 gap-1"
-                  >
-                    <input
-                      type="number"
-                      className="rounded border border-hairline bg-canvas/70 px-2 py-1"
-                      value={Math.round(point.xMm)}
-                      onChange={(event) => {
-                        const nextX = Number(event.target.value);
+              <div className="space-y-1 rounded border border-hairline bg-canvas/70 px-2 py-1">
+                <button
+                  type="button"
+                  aria-label="Vertices"
+                  className="flex w-full items-center justify-between text-left text-[11px] font-medium"
+                  onClick={() => setIsVertexEditorExpanded((current) => !current)}
+                >
+                  <span>Vertices</span>
+                  <span>{isVertexEditorExpanded ? "−" : "+"}</span>
+                </button>
+                {isVertexEditorExpanded ? (
+                  <div className="space-y-1">
+                    {selectedItem.points.map((point, pointIndex) => (
+                      <div
+                        key={`${selectedItem.id}-point-${pointIndex}`}
+                        className="grid grid-cols-2 gap-1"
+                      >
+                        <input
+                          type="number"
+                          className="rounded border border-hairline bg-canvas px-2 py-1"
+                          value={Math.round(point.xMm)}
+                          onChange={(event) => {
+                            const nextX = Number(event.target.value);
 
-                        if (!Number.isNaN(nextX)) {
-                          state.updateSelectedPrimitivePoint(pointIndex, {
-                            xMm: nextX,
-                            yMm: point.yMm,
-                          });
-                        }
-                      }}
-                    />
-                    <input
-                      type="number"
-                      className="rounded border border-hairline bg-canvas/70 px-2 py-1"
-                      value={Math.round(point.yMm)}
-                      onChange={(event) => {
-                        const nextY = Number(event.target.value);
+                            if (!Number.isNaN(nextX)) {
+                              state.updateSelectedPrimitivePoint(pointIndex, {
+                                xMm: nextX,
+                                yMm: point.yMm,
+                              });
+                            }
+                          }}
+                        />
+                        <input
+                          type="number"
+                          className="rounded border border-hairline bg-canvas px-2 py-1"
+                          value={Math.round(point.yMm)}
+                          onChange={(event) => {
+                            const nextY = Number(event.target.value);
 
-                        if (!Number.isNaN(nextY)) {
-                          state.updateSelectedPrimitivePoint(pointIndex, {
-                            xMm: point.xMm,
-                            yMm: nextY,
-                          });
-                        }
-                      }}
-                    />
+                            if (!Number.isNaN(nextY)) {
+                              state.updateSelectedPrimitivePoint(pointIndex, {
+                                xMm: point.xMm,
+                                yMm: nextY,
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : null}
               </div>
               {selectedItem.kind === "polyline" ||
               selectedItem.kind === "polygon" ? (
@@ -305,9 +489,7 @@ export function EditorPage() {
               ) : null}
             </div>
           ) : (
-            <div className="mt-2 text-[11px] text-ink-muted-48">
-              Select shape to edit dimensions/points
-            </div>
+            <div className="mt-2 text-[11px] text-ink-muted-48">-</div>
           )}
         </div>
         <CanvasEditor
@@ -320,6 +502,17 @@ export function EditorPage() {
           onSelectItems={(itemIds) => state.selectItems(itemIds)}
           onClearSelection={() => state.selectItems([])}
           onMoveSelectedBy={(delta) => state.moveSelectedItemBy(delta)}
+          onRotateSelectedBy={(deltaDeg) => state.rotateSelectedPrimitiveBy(deltaDeg)}
+          onMoveVertex={(vertex, point) => {
+            const selected = state.items.find((item) => item.id === vertex.itemId);
+
+            if (!selected) {
+              return;
+            }
+
+            state.selectSingleItem(vertex.itemId);
+            state.updateSelectedPrimitivePoint(vertex.pointIndex, point);
+          }}
         />
       </div>
     </section>

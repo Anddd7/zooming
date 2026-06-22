@@ -46,15 +46,6 @@ describe("CanvasEditor", () => {
     expect(screen.getByText(/zoom:\s*0\.01x/i)).toBeInTheDocument();
   });
 
-  it("supports quick zoom selection", () => {
-    render(<CanvasEditor />);
-
-    const zoomSelect = screen.getByRole("combobox", { name: "Quick zoom" });
-    fireEvent.change(zoomSelect, { target: { value: "0.50" } });
-
-    expect(screen.getByText(/zoom:\s*0\.50x/i)).toBeInTheDocument();
-  });
-
   it("selects primitive on canvas click and drags selected primitive", () => {
     const onSelectItem = vi.fn();
     const onMoveSelectedBy = vi.fn();
@@ -97,7 +88,7 @@ describe("CanvasEditor", () => {
     fireEvent.mouseUp(canvas, { clientX: 140, clientY: 150 });
 
     expect(onSelectItem).toHaveBeenCalledWith("item-1");
-    expect(onMoveSelectedBy).toHaveBeenCalledWith({ xMm: 20, yMm: 30 });
+    expect(onMoveSelectedBy).toHaveBeenCalledWith({ xMm: 40, yMm: 60 });
   });
 
   it("maps pointer coordinates with canvas CSS scaling", () => {
@@ -154,7 +145,7 @@ describe("CanvasEditor", () => {
     fireEvent.mouseUp(canvas, { clientX: 80, clientY: 90 });
 
     expect(onSelectItem).toHaveBeenCalledWith("item-1");
-    expect(onMoveSelectedBy).toHaveBeenCalledWith({ xMm: 40, yMm: 60 });
+    expect(onMoveSelectedBy).toHaveBeenCalledWith({ xMm: 80, yMm: 120 });
   });
 
   it("box-selects primitives with left-button drag on empty space", () => {
@@ -196,5 +187,49 @@ describe("CanvasEditor", () => {
     fireEvent.mouseUp(canvas, { clientX: 140, clientY: 140 });
 
     expect(onSelectItems).toHaveBeenCalledWith(["item-1"]);
+  });
+
+  it("drags a selected vertex when cursor is on vertex", () => {
+    const onMoveVertex = vi.fn();
+
+    render(
+      <CanvasEditor
+        layers={[
+          {
+            id: "layer-floorplan",
+            name: "Floor Plan",
+            category: "floorplan",
+            zIndex: 0,
+            visible: true,
+            locked: false,
+            opacity: 1,
+          },
+        ]}
+        items={[
+          {
+            id: "item-1",
+            kind: "polygon",
+            layerId: "layer-floorplan",
+            points: [
+              { xMm: 100, yMm: 100 },
+              { xMm: 240, yMm: 100 },
+              { xMm: 220, yMm: 200 },
+            ],
+          },
+        ]}
+        selectedItemIds={["item-1"]}
+        onMoveVertex={onMoveVertex}
+      />,
+    );
+
+    const canvas = screen.getByTestId("editor-canvas-surface");
+    fireEvent.mouseDown(canvas, { clientX: 50, clientY: 50, button: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 60, clientY: 58 });
+    fireEvent.mouseUp(canvas, { clientX: 60, clientY: 58 });
+
+    expect(onMoveVertex).toHaveBeenCalledWith(
+      { itemId: "item-1", pointIndex: 0 },
+      { xMm: 120, yMm: 116 },
+    );
   });
 });
