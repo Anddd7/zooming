@@ -12,7 +12,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.app.tsbuildinfo"
   },
   "include": ["src"]
 }
