@@ -14,6 +14,7 @@ import {
 
 function createMockContext() {
   let strokeStyle = "";
+  let lineWidth = 0;
 
   return {
     beginPath: vi.fn(),
@@ -28,7 +29,12 @@ function createMockContext() {
     get strokeStyle() {
       return strokeStyle;
     },
-    set lineWidth(_: number) {},
+    set lineWidth(value: number) {
+      lineWidth = value;
+    },
+    get lineWidth() {
+      return lineWidth;
+    },
     set fillStyle(_: string) {},
     set font(_: string) {},
     fillText: vi.fn(),
@@ -86,6 +92,30 @@ describe("drawPrimitives", () => {
 
     expect(ctx.stroke).toHaveBeenCalledTimes(1);
     expect((ctx as unknown as { strokeStyle: string }).strokeStyle).toBe("#ff0000");
+  });
+
+  it("draws polyline with configured visual line width", () => {
+    const ctx = createMockContext();
+    const items: PrimitiveItem[] = [
+      {
+        id: "item-line",
+        kind: "polyline",
+        layerId: visibleLayer.id,
+        lineWidth: 5,
+        points: [
+          { xMm: 0, yMm: 0 },
+          { xMm: 100, yMm: 0 },
+        ],
+      },
+    ];
+
+    drawPrimitives(ctx, items, [visibleLayer], {
+      worldToScreen: (point) => ({ x: point.xMm, y: point.yMm }),
+      selectedItemIds: [],
+      hoveredVertex: null,
+    });
+
+    expect((ctx as unknown as { lineWidth: number }).lineWidth).toBe(5);
   });
 });
 

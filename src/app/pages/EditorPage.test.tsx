@@ -17,6 +17,11 @@ describe("EditorPage", () => {
     expect(screen.getByRole("button", { name: "导入多边形" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制选中" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "删除选中" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "收藏" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "素材库" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "平铺" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "水平对齐" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "垂直对齐" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新增图层" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "删除选中图层" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "预算" })).toBeInTheDocument();
@@ -57,11 +62,11 @@ describe("EditorPage", () => {
 
     expect(screen.getByText(/估算/i)).toBeInTheDocument();
     expect(screen.getByText(/mm²\s*\/\s*[0-9.]+\s*m²/i)).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("120")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("spinbutton").length).toBe(2);
 
     fireEvent.click(screen.getByRole("button", { name: /位置/i }));
 
-    expect(screen.getAllByDisplayValue("120").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("spinbutton").length).toBeGreaterThan(2);
   });
 
   it("shows '-' in properties panel when no item selected", () => {
@@ -242,6 +247,43 @@ describe("EditorPage", () => {
     expect(screen.getByText("导入户型多边形")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "提示词" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "多边形 JSON" })).toBeInTheDocument();
+  });
+
+  it("creates new primitive at current viewport center", () => {
+    render(<EditorPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "添加矩形" }));
+    fireEvent.click(screen.getByRole("button", { name: /位置/i }));
+
+    expect(screen.getAllByDisplayValue("870").length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue("420").length).toBeGreaterThan(0);
+  });
+
+  it("supports favorite and insert from asset library", () => {
+    render(<EditorPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "添加矩形" }));
+    fireEvent.click(screen.getByRole("button", { name: "收藏" }));
+    fireEvent.click(screen.getByRole("button", { name: "素材库" }));
+    fireEvent.click(screen.getByRole("button", { name: /收藏-item-1/i }));
+
+    expect(screen.getByText("item-2")).toBeInTheDocument();
+  });
+
+  it("tiles selected primitive by x*y values", () => {
+    render(<EditorPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "添加矩形" }));
+    fireEvent.click(screen.getByRole("button", { name: "平铺" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "平铺 X" }), {
+      target: { value: "2" },
+    });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "平铺 Y" }), {
+      target: { value: "2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "执行平铺" }));
+
+    expect(screen.getByText("item-4")).toBeInTheDocument();
   });
 
   it("copies import prompt text by one-click copy button", async () => {

@@ -43,4 +43,5 @@ export type PrimitiveItem = {
   points: Point[];
   pricing?: ItemPricingRule;
   tagColor?: string;
+  lineWidth?: number;
 };

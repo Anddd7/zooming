@@ -39,6 +39,7 @@ type CanvasEditorProps = {
   onMoveVertex?: (vertex: VertexHit, point: Point) => void;
   onMoveSelectedEdgeBy?: (edgeHit: EdgeHit, delta: Point) => void;
   onRotateSelectedBy?: (deltaDeg: number) => void;
+  onViewportCenterChange?: (center: Point) => void;
 };
 
 type DragState =
@@ -322,6 +323,7 @@ export function CanvasEditor({
   onMoveVertex,
   onMoveSelectedEdgeBy,
   onRotateSelectedBy,
+  onViewportCenterChange,
 }: CanvasEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragStateRef = useRef<DragState>(null);
@@ -345,6 +347,25 @@ export function CanvasEditor({
       }),
     [pan, effectiveScale],
   );
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    const centerScreenPoint = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+    };
+    const centerWorldPoint = viewport.screenToWorld(centerScreenPoint);
+
+    onViewportCenterChange?.({
+      xMm: centerWorldPoint.x,
+      yMm: centerWorldPoint.y,
+    });
+  }, [onViewportCenterChange, pan, viewport, zoom]);
   function setZoomValue(nextZoomOrUpdater: number | ((currentZoom: number) => number)) {
     const nextZoom =
       typeof nextZoomOrUpdater === "function"

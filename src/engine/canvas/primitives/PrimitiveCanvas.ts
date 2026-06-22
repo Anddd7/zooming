@@ -177,8 +177,9 @@ export function drawPrimitives(
 
     const isSelected = selectedItemIdSet.has(item.id);
     const itemColor = item.tagColor ?? DEFAULT_ITEM_TAG_COLOR;
+    const baseLineWidth = item.kind === "polyline" ? Math.max(1, item.lineWidth ?? 1) : 1;
     ctx.strokeStyle = itemColor;
-    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.lineWidth = isSelected ? Math.max(baseLineWidth, 2) : baseLineWidth;
     ctx.stroke();
 
     if (item.kind === "rect" || item.kind === "polygon") {
