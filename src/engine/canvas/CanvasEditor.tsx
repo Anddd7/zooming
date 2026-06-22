@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 
+import type { PrimitiveItem } from "../../domains/drawing/PrimitiveItem";
+import type { Point } from "../../domains/geometry/Geometry";
+import type { Layer } from "../../domains/layer/Layer";
+import { createViewportTransform } from "./viewport/ViewportTransform";
 import { drawGrid } from "./grid/GridRenderer";
+import { drawPrimitives, hitTestPrimitive } from "./primitives/PrimitiveCanvas";
 
 const DEFAULT_WIDTH = 960;
 const DEFAULT_HEIGHT = 480;
@@ -8,15 +14,43 @@ const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.1;
 
+type CanvasEditorProps = {
+  items?: PrimitiveItem[];
+  layers?: Layer[];
+  selectedItemId?: string | null;
+  onSelectItem?: (itemId: string) => void;
+  onMoveSelectedBy?: (delta: Point) => void;
+};
+
+type DragState =
+  | { mode: "pan"; x: number; y: number }
+  | { mode: "item"; worldPoint: Point }
+  | null;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-export function CanvasEditor() {
+export function CanvasEditor({
+  items = [],
+  layers = [],
+  selectedItemId = null,
+  onSelectItem,
+  onMoveSelectedBy,
+}: CanvasEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragStateRef = useRef<DragState>(null);
   const [pan, setPan] = useState({ offsetX: 0, offsetY: 0 });
   const [zoom, setZoom] = useState(1);
+
+  const viewport = useMemo(
+    () =>
+      createViewportTransform({
+        pan,
+        zoom: { scale: zoom },
+      }),
+    [pan, zoom],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,7 +73,35 @@ export function CanvasEditor() {
       scale: zoom,
       spacingMm: 100,
     });
-  }, [pan, zoom]);
+    drawPrimitives(context, items, layers, {
+      worldToScreen: (point) =>
+        viewport.worldToScreen({
+          x: point.xMm,
+          y: point.yMm,
+        }),
+      selectedItemId,
+    });
+  }, [pan, zoom, viewport, items, layers, selectedItemId]);
+
+  function toWorldPoint(event: MouseEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current;
+
+    if (!canvas) {
+      return { xMm: 0, yMm: 0 };
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const screenPoint = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    const worldPoint = viewport.screenToWorld(screenPoint);
+
+    return {
+      xMm: worldPoint.x,
+      yMm: worldPoint.y,
+    };
+  }
 
   return (
     <section
@@ -62,29 +124,50 @@ export function CanvasEditor() {
             return;
           }
 
-          dragStartRef.current = { x: event.clientX, y: event.clientY };
-        }}
-        onMouseMove={(event) => {
-          const dragStart = dragStartRef.current;
+          const worldPoint = toWorldPoint(event);
+          const hitItemId = hitTestPrimitive(items, layers, worldPoint);
 
-          if (!dragStart) {
+          if (hitItemId) {
+            onSelectItem?.(hitItemId);
+            dragStateRef.current = { mode: "item", worldPoint };
             return;
           }
 
-          const deltaX = event.clientX - dragStart.x;
-          const deltaY = event.clientY - dragStart.y;
+          dragStateRef.current = { mode: "pan", x: event.clientX, y: event.clientY };
+        }}
+        onMouseMove={(event) => {
+          const dragState = dragStateRef.current;
 
-          setPan((currentPan) => ({
-            offsetX: currentPan.offsetX + deltaX,
-            offsetY: currentPan.offsetY + deltaY,
-          }));
-          dragStartRef.current = { x: event.clientX, y: event.clientY };
+          if (!dragState) {
+            return;
+          }
+
+          if (dragState.mode === "pan") {
+            const deltaX = event.clientX - dragState.x;
+            const deltaY = event.clientY - dragState.y;
+
+            setPan((currentPan) => ({
+              offsetX: currentPan.offsetX + deltaX,
+              offsetY: currentPan.offsetY + deltaY,
+            }));
+            dragStateRef.current = { mode: "pan", x: event.clientX, y: event.clientY };
+            return;
+          }
+
+          const worldPoint = toWorldPoint(event);
+          const delta = {
+            xMm: worldPoint.xMm - dragState.worldPoint.xMm,
+            yMm: worldPoint.yMm - dragState.worldPoint.yMm,
+          };
+
+          onMoveSelectedBy?.(delta);
+          dragStateRef.current = { mode: "item", worldPoint };
         }}
         onMouseUp={() => {
-          dragStartRef.current = null;
+          dragStateRef.current = null;
         }}
         onMouseLeave={() => {
-          dragStartRef.current = null;
+          dragStateRef.current = null;
         }}
         onWheel={(event) => {
           event.preventDefault();

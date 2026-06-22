@@ -12,6 +12,8 @@ HTMLCanvasElement.prototype.getContext = vi.fn(() => {
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
+    closePath: vi.fn(),
     stroke: vi.fn(),
+    fill: vi.fn(),
   } as unknown as CanvasRenderingContext2D;
 });

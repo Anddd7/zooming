@@ -13,8 +13,9 @@ Proposed
 - [x] 初始化 React/Vite/TypeScript 项目骨架
 - [x] 路由、基础布局、主题接入（Milestone 1）
 - [x] 领域模型与 repository 接口基线（Milestone 1）
-- [ ] 落地 Canvas 编辑器基础能力
+- [x] 落地 Canvas 编辑器基础能力
 - [x] Canvas 真正渲染层 + 网格 + 基础 pan/zoom（Milestone 2 slice 1）
+- [x] 图层切换 + 线/矩形/多边形基础编辑（Milestone 2 slice 2）
 - [ ] 落地工程量/成本/任务联动
 - [ ] 落地 YAML 导入导出与样例项目
 
