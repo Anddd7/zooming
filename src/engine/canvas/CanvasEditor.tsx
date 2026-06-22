@@ -17,12 +17,12 @@ const DEFAULT_HEIGHT = 480;
 const MIN_ZOOM = 0.01;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.1;
-const QUICK_ZOOM_LEVELS = [1, 0.8, 0.5, 0.1];
-
 type CanvasEditorProps = {
   items?: PrimitiveItem[];
   layers?: Layer[];
   selectedItemIds?: string[];
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
   onSelectItem?: (itemId: string) => void;
   onSelectItems?: (itemIds: string[]) => void;
   onClearSelection?: () => void;
@@ -49,6 +49,8 @@ export function CanvasEditor({
   items = [],
   layers = [],
   selectedItemIds = [],
+  zoom: controlledZoom,
+  onZoomChange,
   onSelectItem,
   onSelectItems,
   onClearSelection,
@@ -57,11 +59,12 @@ export function CanvasEditor({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragStateRef = useRef<DragState>(null);
   const [pan, setPan] = useState({ offsetX: 0, offsetY: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [internalZoom, setInternalZoom] = useState(1);
   const [boxSelection, setBoxSelection] = useState<{
     startScreenPoint: { x: number; y: number };
     currentScreenPoint: { x: number; y: number };
   } | null>(null);
+  const zoom = controlledZoom ?? internalZoom;
 
   const viewport = useMemo(
     () =>
@@ -71,9 +74,19 @@ export function CanvasEditor({
       }),
     [pan, zoom],
   );
-  const quickZoomValue = QUICK_ZOOM_LEVELS.includes(zoom)
-    ? zoom.toFixed(2)
-    : "custom";
+  function setZoomValue(nextZoomOrUpdater: number | ((currentZoom: number) => number)) {
+    const nextZoom =
+      typeof nextZoomOrUpdater === "function"
+        ? nextZoomOrUpdater(zoom)
+        : nextZoomOrUpdater;
+    const clampedZoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+
+    if (controlledZoom === undefined) {
+      setInternalZoom(clampedZoom);
+    }
+
+    onZoomChange?.(clampedZoom);
+  }
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -210,30 +223,6 @@ export function CanvasEditor({
         <span>pan: {Math.round(pan.offsetX)}, {Math.round(pan.offsetY)}</span>
         <span className="ml-3">zoom: {zoom.toFixed(2)}x</span>
       </div>
-      <div className="pointer-events-none absolute bottom-2 left-2 z-10">
-        <label className="pointer-events-auto flex items-center gap-2 rounded-md border border-hairline bg-canvas/70 px-2 py-1 text-xs text-body shadow-sm backdrop-blur">
-          <span>zoom</span>
-          <select
-            aria-label="Quick zoom"
-            className="rounded border border-hairline bg-canvas/80 px-2 py-0.5 text-xs"
-            value={quickZoomValue}
-            onChange={(event) => {
-              const selectedZoom = Number(event.target.value);
-
-              if (!Number.isNaN(selectedZoom)) {
-                setZoom(clamp(selectedZoom, MIN_ZOOM, MAX_ZOOM));
-              }
-            }}
-          >
-            <option value="custom">custom</option>
-            {QUICK_ZOOM_LEVELS.map((level) => (
-              <option key={level} value={level.toFixed(2)}>
-                {level}x
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
       <canvas
         ref={canvasRef}
         data-testid="editor-canvas-surface"
@@ -351,7 +340,7 @@ export function CanvasEditor({
         onWheel={(event) => {
           event.preventDefault();
 
-          setZoom((currentZoom) => {
+          setZoomValue((currentZoom) => {
             const nextZoom =
               event.deltaY < 0 ? currentZoom + ZOOM_STEP : currentZoom - ZOOM_STEP;
 
